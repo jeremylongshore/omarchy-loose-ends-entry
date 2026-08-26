@@ -36,6 +36,7 @@ export GIT_PAGER=cat GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0
 MAXDEPTH=4
 STASH_AGE_DAYS=7
 JOBS=0            # 0 = auto, one per core capped at 16
+MAX_REPOS=256      # hard cap protects the long-lived QML reader and panel
 ONE=""            # internal: scan exactly one repo and exit
 ROOTS=()
 
@@ -44,6 +45,7 @@ while [ $# -gt 0 ]; do
     --max-depth)      MAXDEPTH="${2:-4}"; shift 2 ;;
     --stash-age-days) STASH_AGE_DAYS="${2:-7}"; shift 2 ;;
     --jobs)           JOBS="${2:-0}"; shift 2 ;;
+    --max-repos)      MAX_REPOS="${2:-256}"; shift 2 ;;
     --one)            ONE="${2:-}"; shift 2 ;;
     --) shift; break ;;
     -*) shift ;;
@@ -54,6 +56,8 @@ done
 case "$MAXDEPTH" in ''|*[!0-9]*) MAXDEPTH=4 ;; esac
 case "$STASH_AGE_DAYS" in ''|*[!0-9]*) STASH_AGE_DAYS=7 ;; esac
 case "$JOBS" in ''|*[!0-9]*) JOBS=0 ;; esac
+case "$MAX_REPOS" in ''|*[!0-9]*) MAX_REPOS=256 ;; esac
+[ "$MAX_REPOS" -lt 1 ] && MAX_REPOS=256
 if [ "$JOBS" -le 0 ]; then
   JOBS=$(nproc 2>/dev/null || echo 4)
   [ "$JOBS" -gt 16 ] && JOBS=16
@@ -61,12 +65,12 @@ fi
 
 NOW=$(date +%s)
 
-emit_head() { printf '{"generatedAt":%s,"repos":[' "$NOW"; }
+emit_head() { printf '{"generatedAt":%s,"repoTotal":%s,"truncated":%s,"repos":[' "$NOW" "$1" "$2"; }
 emit_tail() { printf ']}\n'; }
 
 # --one carries no roots by design, so this guard must not swallow it.
 if [ -z "$ONE" ] && [ "${#ROOTS[@]}" -eq 0 ]; then
-  emit_head; emit_tail; exit 0
+  emit_head 0 false; emit_tail; exit 0
 fi
 
 json_escape() {
@@ -173,7 +177,9 @@ fi
 # interval and therefore not shippable. Fanning out across cores brings it to
 # single-digit seconds.
 self="$0"
-repolist=$(
+repolist=$(mktemp -t loose-ends-repolist-XXXXXX)
+trap 'rm -f "$repolist"' EXIT
+{
   for raw_root in "${ROOTS[@]}"; do
     root=$(realpath -e -- "$raw_root" 2>/dev/null) || continue
     [ -d "$root" ] || continue
@@ -184,11 +190,15 @@ repolist=$(
       case "$rrepo/" in "$root"/*) printf '%s\n' "$rrepo" ;; esac
     done
   done | sort -u
-)
+} > "$repolist"
+repo_total=$(wc -l < "$repolist" | tr -d ' ')
+case "$repo_total" in ''|*[!0-9]*) repo_total=0 ;; esac
+truncated=false
+[ "$repo_total" -gt "$MAX_REPOS" ] && truncated=true
 
-printf '{"generatedAt":%s,"repos":[' "$NOW"
-if [ -n "$repolist" ]; then
-  printf '%s\n' "$repolist" \
+emit_head "$repo_total" "$truncated"
+if [ "$repo_total" -gt 0 ]; then
+  head -n "$MAX_REPOS" "$repolist" \
     | xargs -r -d '\n' -P "$JOBS" -I{} "$self" --stash-age-days "$STASH_AGE_DAYS" --one {} \
     | paste -sd, -
 fi
