@@ -5,11 +5,11 @@ import qs.Ui
 // Bar host. Mirrors the first-party split: this widget owns the bar slot and
 // pill button; Panel.qml owns data, lifecycle, and the popup.
 //
-// TEMPLATE: change moduleName to your plugin id. Everything else in this file
-// is the shape contract the shell expects and should not need edits.
+// The host stays intentionally small: Panel.qml owns all scanning and display
+// state, while this object supplies the shell's bar-widget shape contract.
 BarWidget {
   id: root
-  moduleName: "io.github.YOURNAME.widget-name"
+  moduleName: "io.github.jeremylongshore.loose-ends"
 
   function injectPanel() {
     var target = panelLoader.item
@@ -71,9 +71,8 @@ BarWidget {
     bar: root.bar
     text: panelLoader.item ? panelLoader.item.label : ""
     fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-    // The alert state lights the pill in the bar's active color so a glance
-    // reads it without parsing the text.
-    active: panelLoader.item ? panelLoader.item.isAlert === true : false
+    // Fresh local edits should not shout from the edge of the screen.
+    active: panelLoader.item ? panelLoader.item.isAlert : false
     tooltipText: panelLoader.item ? panelLoader.item.tooltip : ""
 
     onPressed: function(b) {

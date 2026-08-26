@@ -6,14 +6,9 @@ Entries are derived from this repository's commit history, so every line
 corresponds to a real change. The format follows Keep a Changelog and the
 project uses Semantic Versioning.
 
-Regenerate after a release with:
-
-```bash
-scripts/gen-changelog.py . "<Plugin Name>" "<version>"
-```
-
-The generator normalises em and en dashes, because a changelog is shipped prose
-and gate c28 refuses them.
+Add release notes by hand when this plugin ships. Keep each entry tied to a
+verified commit or release change. Avoid em and en dashes because gate c28
+rejects them in shipped prose.
 
 ## [Unreleased]
 

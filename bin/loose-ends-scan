@@ -1,0 +1,195 @@
+#!/usr/bin/env bash
+# loose-ends-scan: report unfinished work across every git repository under a set
+# of roots, as one JSON object on stdout.
+#
+# WHY A SCRIPT AND NOT QML
+#   Walking a filesystem and shelling out to git is not something a compositor
+#   should be doing inline. This runs as one bounded process, emits JSON, and the
+#   QML side only ever parses. The parse layer is Model.js, which node can load,
+#   so the whole display path unit-tests without a shell.
+#
+# WHY NO NETWORK
+#   There is none, by construction. Every fact here comes from the local
+#   filesystem and from git plumbing. No API, no token, no host to validate.
+#   That is deliberate: the last plugin in this set that accepted a user-supplied
+#   URL spent three review rounds on it and ended up deleting the feature.
+#
+# SAFETY
+#   * Roots are canonicalised with realpath and any root that is not a directory
+#     is dropped. A root that resolves outside itself cannot happen because the
+#     resolved path IS the root we then confine to.
+#   * find is given -xdev so a scan cannot wander onto another filesystem, and
+#     -maxdepth so a deep tree cannot cost unbounded time.
+#   * Symlinks are not followed: find without -L, plus an explicit -type d test.
+#   * Every git invocation carries --no-optional-locks so reading a repository
+#     never writes to it. Without that, git can refresh the index and mutate a
+#     repo the user did not ask us to touch.
+#   * git is run with a fixed argv. No user string is ever interpolated into a
+#     command line, which is what gate c34 checks for.
+#
+# Usage: loose-ends-scan [--max-depth N] [--stash-age-days N] ROOT [ROOT...]
+set -uo pipefail
+export LC_ALL=C
+# git respects a lot of environment. Pin the ones that change output shape.
+export GIT_PAGER=cat GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0
+
+MAXDEPTH=4
+STASH_AGE_DAYS=7
+JOBS=0            # 0 = auto, one per core capped at 16
+ONE=""            # internal: scan exactly one repo and exit
+ROOTS=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --max-depth)      MAXDEPTH="${2:-4}"; shift 2 ;;
+    --stash-age-days) STASH_AGE_DAYS="${2:-7}"; shift 2 ;;
+    --jobs)           JOBS="${2:-0}"; shift 2 ;;
+    --one)            ONE="${2:-}"; shift 2 ;;
+    --) shift; break ;;
+    -*) shift ;;
+    *)  ROOTS+=("$1"); shift ;;
+  esac
+done
+
+case "$MAXDEPTH" in ''|*[!0-9]*) MAXDEPTH=4 ;; esac
+case "$STASH_AGE_DAYS" in ''|*[!0-9]*) STASH_AGE_DAYS=7 ;; esac
+case "$JOBS" in ''|*[!0-9]*) JOBS=0 ;; esac
+if [ "$JOBS" -le 0 ]; then
+  JOBS=$(nproc 2>/dev/null || echo 4)
+  [ "$JOBS" -gt 16 ] && JOBS=16
+fi
+
+NOW=$(date +%s)
+
+emit_head() { printf '{"generatedAt":%s,"repos":[' "$NOW"; }
+emit_tail() { printf ']}\n'; }
+
+# --one carries no roots by design, so this guard must not swallow it.
+if [ -z "$ONE" ] && [ "${#ROOTS[@]}" -eq 0 ]; then
+  emit_head; emit_tail; exit 0
+fi
+
+json_escape() {
+  # Escape for a JSON string. Backslash first, then quote, then control chars.
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
+    -e 's/\x09/\\t/g' -e 's/\x0d/\\r/g' | tr -d '\000-\010\013\014\016-\037'
+}
+
+# ---------------------------------------------------------------- one repo
+# Emits ONE json object, or nothing when the repo has no loose ends. Invoked
+# directly by the outer loop through xargs -P, which is why it is a separate
+# mode rather than a shell function: exporting functions is bash-only and
+# breaks the moment /bin/sh is dash.
+scan_one() {
+  local rrepo="$1"
+  [ -d "$rrepo" ] || return 0
+
+  local g=(git --no-optional-locks -C "$rrepo")
+
+  local branch detached
+  branch=$("${g[@]}" symbolic-ref --quiet --short HEAD 2>/dev/null || echo "")
+  detached=false
+  if [ -z "$branch" ]; then
+    detached=true
+    branch=$("${g[@]}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  fi
+
+  local status_out dirty
+  status_out=$("${g[@]}" status --porcelain --untracked-files=normal 2>/dev/null)
+  dirty=$(printf '%s' "$status_out" | grep -c . || true)
+  case "$dirty" in ''|*[!0-9]*) dirty=0 ;; esac
+
+  # Newest mtime among modified files: how long since this was touched. Capped
+  # at 40 files on purpose. If more than 40 files are modified you are plainly
+  # working in there right now, and the exact newest mtime stops mattering.
+  local touched=0 f m
+  if [ "$dirty" -gt 0 ]; then
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      [ -e "$rrepo/$f" ] || continue
+      m=$(stat -c %Y -- "$rrepo/$f" 2>/dev/null || echo 0)
+      [ "$m" -gt "$touched" ] && touched=$m
+    done <<< "$(printf '%s' "$status_out" | cut -c4- | head -40)"
+  fi
+
+  local ahead=0 ahead_age=0 upstream oldest
+  upstream=$("${g[@]}" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || echo "")
+  if [ -n "$upstream" ]; then
+    ahead=$("${g[@]}" rev-list --count "$upstream"..HEAD 2>/dev/null || echo 0)
+    case "$ahead" in ''|*[!0-9]*) ahead=0 ;; esac
+    if [ "$ahead" -gt 0 ]; then
+      oldest=$("${g[@]}" log --format=%ct "$upstream"..HEAD 2>/dev/null | tail -1)
+      case "$oldest" in ''|*[!0-9]*) oldest=0 ;; esac
+      [ "$oldest" -gt 0 ] && ahead_age=$(( NOW - oldest ))
+    fi
+  fi
+
+  local stale_stash=0 stash_age=0 ts age
+  while IFS= read -r ts; do
+    case "$ts" in ''|*[!0-9]*) continue ;; esac
+    age=$(( NOW - ts ))
+    if [ "$age" -gt $(( STASH_AGE_DAYS * 86400 )) ]; then
+      stale_stash=$(( stale_stash + 1 ))
+      [ "$age" -gt "$stash_age" ] && stash_age=$age
+    fi
+  done <<< "$("${g[@]}" stash list --format=%ct 2>/dev/null)"
+
+  local interrupted="" gd
+  gd=$("${g[@]}" rev-parse --git-dir 2>/dev/null || echo "")
+  if [ -n "$gd" ]; then
+    case "$gd" in /*) ;; *) gd="$rrepo/$gd" ;; esac
+    if [ -d "$gd/rebase-merge" ] || [ -d "$gd/rebase-apply" ]; then interrupted="rebase"; fi
+    [ -f "$gd/MERGE_HEAD" ] && interrupted="merge"
+    [ -f "$gd/CHERRY_PICK_HEAD" ] && interrupted="cherry-pick"
+    [ -f "$gd/BISECT_LOG" ] && interrupted="bisect"
+  fi
+
+  # A clean, pushed, unstashed repo on a branch has nothing to say. Say nothing.
+  if [ "$dirty" -eq 0 ] && [ "$ahead" -eq 0 ] && [ "$stale_stash" -eq 0 ] \
+     && [ -z "$interrupted" ] && [ "$detached" = false ]; then
+    return 0
+  fi
+
+  local dirty_age=0
+  [ "$touched" -gt 0 ] && dirty_age=$(( NOW - touched ))
+
+  printf '{"path":"%s","name":"%s","branch":"%s","detached":%s,"dirty":%s,"dirtyAge":%s,"ahead":%s,"aheadAge":%s,"staleStash":%s,"stashAge":%s,"interrupted":"%s"}\n' \
+    "$(json_escape "$rrepo")" \
+    "$(json_escape "$(basename -- "$rrepo")")" \
+    "$(json_escape "$branch")" \
+    "$detached" "$dirty" "$dirty_age" "$ahead" "$ahead_age" \
+    "$stale_stash" "$stash_age" \
+    "$(json_escape "$interrupted")"
+}
+
+if [ -n "$ONE" ]; then
+  scan_one "$ONE"
+  exit 0
+fi
+
+# ---------------------------------------------------------------- all roots
+# Collect the repo list first, confine it, then fan out. Serial scanning of ~180
+# repos took two minutes on the author's box, which is longer than the poll
+# interval and therefore not shippable. Fanning out across cores brings it to
+# single-digit seconds.
+self="$0"
+repolist=$(
+  for raw_root in "${ROOTS[@]}"; do
+    root=$(realpath -e -- "$raw_root" 2>/dev/null) || continue
+    [ -d "$root" ] || continue
+    find "$root" -xdev -maxdepth "$MAXDEPTH" -type d -name .git 2>/dev/null | while IFS= read -r gitdir; do
+      repo=$(dirname -- "$gitdir")
+      rrepo=$(realpath -e -- "$repo" 2>/dev/null) || continue
+      # Confinement: the RESOLVED repo must still live under the RESOLVED root.
+      case "$rrepo/" in "$root"/*) printf '%s\n' "$rrepo" ;; esac
+    done
+  done | sort -u
+)
+
+printf '{"generatedAt":%s,"repos":[' "$NOW"
+if [ -n "$repolist" ]; then
+  printf '%s\n' "$repolist" \
+    | xargs -r -d '\n' -P "$JOBS" -I{} "$self" --stash-age-days "$STASH_AGE_DAYS" --one {} \
+    | paste -sd, -
+fi
+printf ']}\n'
