@@ -96,7 +96,7 @@ gate_resolve_tree() {
 }
 
 # List files to scan, relative to GATE_TREE_DIR, filtered by an egrep pattern
-# on the path. full mode: git-tracked files (fallback: find, .git excluded).
+# on the path. Full mode scans untracked, unignored files too.
 # diff mode: files added or modified vs the base branch.
 # Usage: gate_tree_files '\.(md|json|svg)$'
 # scripts/gates/** is excluded: a candidate repo may vendor this gate lane so
@@ -109,8 +109,34 @@ gate_tree_files() {
   local pat="$1"
   [[ -n "$GATE_TREE_DIR" ]] || return 0
   if [[ "$GATE_TREE_MODE" == "full" ]]; then
-    if [[ -d "$GATE_TREE_DIR/.git" ]]; then
-      /usr/bin/git -C "$GATE_TREE_DIR" ls-files 2>/dev/null
+    # ALWAYS walk the filesystem in full mode; never `git ls-files`.
+    # ls-files enumerates TRACKED files only, so anything not yet `git add`ed
+    # was invisible to every content gate. That is not a correctness nit, it is
+    # the accept-rule being narrower than the claim: with an untracked hostile
+    # file present, c31 and c34 abstained and c38 returned
+    #   PASS - no narrow-dotted-quad host filter found
+    # about a file it had never opened. A hostile submitter set the forgery cost
+    # to zero by not running `git add`, and tracked-ness is not a security
+    # boundary anywhere in this pipeline. It also produced three false-cleans on
+    # this operator's own trees.
+    #
+    # Git-ignore is the boundary for generated/dependency content, not
+    # tracked-ness. After npm install, third-party README prose must not become
+    # a plugin-author finding; an unignored source file still must.
+    if /usr/bin/git -C "$GATE_TREE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      # One Git query for the whole tree. Calling check-ignore once per file
+      # turns a normal npm dependency tree into thousands of Git processes and
+      # makes every gate too slow to use. The sorted set difference preserves
+      # the exact same boundary while keeping the full suite practical.
+      local all ignored
+      all=$(mktemp -t gate-tree-all-XXXXXX)
+      ignored=$(mktemp -t gate-tree-ignored-XXXXXX)
+      /usr/bin/find "$GATE_TREE_DIR" -type f -not -path "$GATE_TREE_DIR/.git/*" \
+        -printf '%P\n' | LC_ALL=C /usr/bin/sort > "$all"
+      /usr/bin/git -C "$GATE_TREE_DIR" check-ignore --stdin < "$all" 2>/dev/null \
+        | LC_ALL=C /usr/bin/sort > "$ignored" || true
+      /usr/bin/comm -23 "$all" "$ignored"
+      rm -f "$all" "$ignored"
     else
       ( cd "$GATE_TREE_DIR" && /usr/bin/find . -type f -not -path './.git/*' | /usr/bin/sed 's#^\./##' )
     fi

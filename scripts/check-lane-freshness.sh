@@ -37,15 +37,21 @@ while read -r want file; do
   [[ "$want" == \#* || -z "$want" ]] && continue
   # A 404 on a gate that exists locally means canonical DELETED it. That is
   # drift too, not an outage, so it is only forgiven when every fetch fails.
-  body=$(/usr/bin/curl -fsSL --max-time 20 "$BASE/$file" 2>/dev/null)
+  # Do not capture a file body in command substitution: POSIX strips trailing
+  # newlines there, changing the SHA even when canonical and vendored bytes are
+  # identical. Hash the downloaded file directly instead.
+  body=$(mktemp -t lane-freshness-XXXXXX)
+  /usr/bin/curl -fsSL --max-time 20 "$BASE/$file" -o "$body" 2>/dev/null
   rc=$?
   if [[ "$rc" -ne 0 ]]; then
+    rm -f "$body"
     echo "  ?  $file — could not fetch (rc=$rc)"
     unreachable=$((unreachable + 1))
     continue
   fi
   checked=$((checked + 1))
-  got=$(/usr/bin/printf '%s' "$body" | /usr/bin/sha256sum | /usr/bin/cut -d' ' -f1)
+  got=$(/usr/bin/sha256sum "$body" | /usr/bin/cut -d' ' -f1)
+  rm -f "$body"
   local_hash=$(cd "$GATES" && /usr/bin/sha256sum "$file" | /usr/bin/cut -d' ' -f1)
   if [[ "$got" != "$local_hash" ]]; then
     # Deliberately "differs", not "is behind": a hash comparison cannot tell

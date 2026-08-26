@@ -30,6 +30,7 @@ var HOUR = 3600
 // forgot, and it is the only one worth interrupting anyone about.
 var WARN_AGE = 3 * DAY
 var STALE_AGE = 14 * DAY
+var MAX_ROWS = 256
 
 // An interrupted operation outranks everything by age, because the repository is
 // in a state nobody meant to leave it in and git will keep saying so until it is
@@ -84,12 +85,25 @@ function severity(r) {
 // Parse the scanner's output into display rows. Malformed input returns the empty
 // shape so the panel keeps last-good state rather than tearing itself down. A
 // scanner that fails should read as "nothing new", never as "everything is fine".
+function isScanEnvelope(raw) {
+  var data
+  try { data = JSON.parse(String(raw || "")) } catch (e) { return false }
+  return !!(data && Object.prototype.toString.call(data.repos) === "[object Array]")
+}
+
+function scanInfo(raw) {
+  var data
+  try { data = JSON.parse(String(raw || "")) } catch (e) { return { valid: false, repoTotal: 0, truncated: false } }
+  if (!data || Object.prototype.toString.call(data.repos) !== "[object Array]") return { valid: false, repoTotal: 0, truncated: false }
+  return { valid: true, repoTotal: Math.max(0, Number(data.repoTotal) || 0), truncated: !!data.truncated || data.repos.length > MAX_ROWS }
+}
+
 function parseScan(raw) {
   var data
   try { data = JSON.parse(String(raw || "")) } catch (e) { return [] }
-  if (!data || !data.repos || !data.repos.length) return []
+  if (!data || Object.prototype.toString.call(data.repos) !== "[object Array]" || !data.repos.length) return []
   var out = []
-  for (var i = 0; i < data.repos.length; i++) {
+  for (var i = 0; i < data.repos.length && i < MAX_ROWS; i++) {
     var r = data.repos[i]
     if (!r || !r.path) continue
     var row = {
@@ -161,6 +175,8 @@ var Model = {
   summarize: summarize,
   humanAge: humanAge,
   severity: severity,
+  isScanEnvelope: isScanEnvelope,
+  scanInfo: scanInfo,
   parseScan: parseScan,
   sortRows: sortRows,
   pillText: pillText,
@@ -168,6 +184,7 @@ var Model = {
   tooltipText: tooltipText,
   WARN_AGE: WARN_AGE,
   STALE_AGE: STALE_AGE
+  , MAX_ROWS: MAX_ROWS
 }
 
 if (typeof module !== "undefined" && module.exports) module.exports = Model

@@ -22,6 +22,8 @@ Panel {
   readonly property int refreshSec: 300
   property var rows: []
   property bool loaded: false
+  property bool scanTruncated: false
+  property int repoTotal: 0
   property double nowMs: Date.now()
   readonly property bool isAlert: Model.pillSeverity(rows) === "stale" || Model.pillSeverity(rows) === "urgent"
   readonly property string label: loaded ? Model.pillText(rows) : "…"
@@ -46,7 +48,8 @@ Panel {
       onStreamFinished: {
         var parsed = Model.parseScan(text)
         // A malformed scan is not a clean machine. Keep the last known queue.
-        if (text && /^\s*\{/.test(text)) { root.rows = parsed; root.loaded = true }
+        var info = Model.scanInfo(text)
+        if (info.valid) { root.rows = parsed; root.repoTotal = info.repoTotal; root.scanTruncated = info.truncated; root.loaded = true }
       }
     }
   }
@@ -98,7 +101,7 @@ Panel {
             title: !root.loaded ? "SCANNING YOUR GIT WORK" : (root.rows.length === 0 ? "NO LOOSE ENDS" : root.rows.length + " REPOSITORIES NEED YOU")
             meta: !root.loaded ? "Reading local repositories only. No network, account, or key."
               : (root.rows.length === 0 ? "Everything is committed, pushed, and free of old stashes."
-                 : "Oldest first. Stale work is louder than work in progress.")
+                 : (root.scanTruncated ? "Showing the first " + root.rows.length + " of " + root.repoTotal + " repositories." : "Oldest first. Stale work wins."))
             foreground: root.bar ? root.bar.foreground : Color.foreground
             fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
           }
