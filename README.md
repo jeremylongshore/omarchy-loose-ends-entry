@@ -1,15 +1,18 @@
 # Loose Ends
 
+![Loose Ends banner](assets/banner.svg)
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/U5S225PTME)
+
 The Git work you left unfinished, visible as a quiet queue on the Omarchy bar.
-
 Loose Ends scans local repositories under your home directory every five minutes
-and shows only work that merits a return: stale uncommitted edits, unpushed
-commits, old stashes, detached heads, and interrupted Git operations. The bar
-stays out of the way when the queue is empty. Open it to see the oldest work
-first and decide what to finish, push, or discard.
+and shows work worth returning to: stale uncommitted edits, unpushed commits,
+old stashes, detached heads, and interrupted Git operations.
 
-It has no network calls, API key, account, daemon, or write access to your
-repositories. Git runs with `--no-optional-locks`; this widget only reads.
+It makes no network calls and has no write access to your repositories. Git runs
+with `--no-optional-locks`; this widget only reads. The scan is bounded, and the
+panel shows the oldest item first so you can decide what to finish, push, or
+discard.
 
 ## Install
 
@@ -30,25 +33,18 @@ panel commands: `open`, `close`, `toggle`, and `refresh`.
 | Detached HEAD | Easy to lose work after a checkout. |
 | Rebase, merge, cherry-pick, bisect | An explicitly interrupted Git operation. |
 
-Fresh changes are shown without turning the bar alert color on. Stale work (14+
-days) and interrupted operations are emphasized. This is a peripheral reminder,
-not a task manager or another source of notifications.
+Fresh changes stay visually quiet. Stale work and interrupted operations are
+emphasized. This is a peripheral reminder, not a task manager.
 
-## Development
+## Verify
 
 ```bash
 npm test
 bash scripts/run-plugin-gates.sh
+bash scripts/check-lane-freshness.sh
+bash scripts/rig-verify.sh .
+bash scripts/rig-render.sh . preview.png
 ```
-
-The scanner can be run directly while developing:
-
-```bash
-bin/loose-ends-scan --max-depth 4 "$HOME"
-```
-
-On an Omarchy rig, also run `omarchy-plugin-validate .`, `qmllint *.qml`, and
-capture the pill and panel before submitting to the marketplace.
 
 ## License
 

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-labelledby="title desc">
+  <title id="title">Loose Ends</title><desc id="desc">A quiet Git work queue for Omarchy</desc>
+  <rect width="1280" height="360" fill="#10131c"/><path d="M0 270H1280" stroke="#3a4356"/><path d="M82 85v177m50-145v112m50-78v45" stroke="#e7b45d" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="82" cy="85" r="14" fill="#e7b45d"/><circle cx="132" cy="117" r="14" fill="#e7b45d"/><circle cx="182" cy="151" r="14" fill="#e7b45d"/>
+  <text x="270" y="156" fill="#f5f1e8" font-family="monospace" font-size="62" font-weight="700" letter-spacing="5">LOOSE ENDS</text><text x="274" y="212" fill="#98a4b8" font-family="monospace" font-size="24" letter-spacing="3">RETURN TO THE WORK THAT STILL MATTERS</text>
+  <text x="274" y="286" fill="#e7b45d" font-family="monospace" font-size="18">LOCAL GIT QUEUE · NO NETWORK · OLDEST FIRST</text>
+</svg>
