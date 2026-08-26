@@ -74,9 +74,16 @@ if [ -z "$ONE" ] && [ "${#ROOTS[@]}" -eq 0 ]; then
 fi
 
 json_escape() {
-  # Escape for a JSON string. Backslash first, then quote, then control chars.
-  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
-    -e 's/\x09/\\t/g' -e 's/\x0d/\\r/g' | tr -d '\000-\010\013\014\016-\037'
+  # Escape for a JSON string. Parameter expansion retains a literal newline;
+  # line-oriented sed cannot, which previously yielded invalid JSON for a
+  # legally named repository containing one.
+  local value="$1"
+  value=${value//\\/\\\\}
+  value=${value//\"/\\\"}
+  value=${value//$'\t'/\\t}
+  value=${value//$'\n'/\\n}
+  value=${value//$'\r'/\\r}
+  printf '%s' "$value" | tr -d '\000-\010\013\014\016-\037'
 }
 
 # ---------------------------------------------------------------- one repo
@@ -183,23 +190,23 @@ trap 'rm -f "$repolist"' EXIT
   for raw_root in "${ROOTS[@]}"; do
     root=$(realpath -e -- "$raw_root" 2>/dev/null) || continue
     [ -d "$root" ] || continue
-    find "$root" -xdev -maxdepth "$MAXDEPTH" -type d -name .git 2>/dev/null | while IFS= read -r gitdir; do
+    find "$root" -xdev -maxdepth "$MAXDEPTH" -type d -name .git -print0 2>/dev/null | while IFS= read -r -d '' gitdir; do
       repo=$(dirname -- "$gitdir")
       rrepo=$(realpath -e -- "$repo" 2>/dev/null) || continue
       # Confinement: the RESOLVED repo must still live under the RESOLVED root.
-      case "$rrepo/" in "$root"/*) printf '%s\n' "$rrepo" ;; esac
+      case "$rrepo/" in "$root"/*) printf '%s\0' "$rrepo" ;; esac
     done
-  done | sort -u
+  done | sort -zu
 } > "$repolist"
-repo_total=$(wc -l < "$repolist" | tr -d ' ')
+repo_total=$(tr -cd '\0' < "$repolist" | wc -c | tr -d ' ')
 case "$repo_total" in ''|*[!0-9]*) repo_total=0 ;; esac
 truncated=false
 [ "$repo_total" -gt "$MAX_REPOS" ] && truncated=true
 
 emit_head "$repo_total" "$truncated"
 if [ "$repo_total" -gt 0 ]; then
-  head -n "$MAX_REPOS" "$repolist" \
-    | xargs -r -d '\n' -P "$JOBS" -I{} "$self" --stash-age-days "$STASH_AGE_DAYS" --one {} \
+  head -z -n "$MAX_REPOS" "$repolist" \
+    | xargs -r -0 -P "$JOBS" -I{} "$self" --stash-age-days "$STASH_AGE_DAYS" --one {} \
     | paste -sd, -
 fi
 printf ']}\n'

@@ -49,3 +49,23 @@ test("scanner reports only unfinished repositories and safely serializes unusual
     fs.rmSync(root, { recursive: true, force: true })
   }
 })
+
+test("scanner emits valid JSON for a repository path containing a newline", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "loose-ends-newline-"))
+  const dirty = path.join(root, "needs\na-return")
+  try {
+    git("init", "-q", dirty)
+    git("-C", dirty, "config", "user.email", "test@example.invalid")
+    git("-C", dirty, "config", "user.name", "Test")
+    fs.writeFileSync(path.join(dirty, "tracked.txt"), "base\n")
+    git("-C", dirty, "add", "tracked.txt")
+    git("-C", dirty, "commit", "-qm", "initial")
+    fs.writeFileSync(path.join(dirty, "tracked.txt"), "changed\n")
+
+    const result = run("--jobs", "1", root)
+    assert.equal(result.repos.length, 1)
+    assert.equal(result.repos[0].name, "needs\na-return")
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
