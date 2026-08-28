@@ -31,11 +31,11 @@
 set -uo pipefail
 export LC_ALL=C
 # git respects a lot of environment. Pin the ones that change output shape.
-export GIT_PAGER=cat GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0
+export GIT_PAGER=cat GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0 GIT_CONFIG_NOSYSTEM=1
 
 MAXDEPTH=4
 STASH_AGE_DAYS=7
-JOBS=0            # 0 = auto, one per core capped at 16
+JOBS=0            # 0 = auto, one per core capped at 4 (was 16; marketplace review #2899)
 MAX_REPOS=256      # hard cap protects the long-lived QML reader and panel
 ONE=""            # internal: scan exactly one repo and exit
 ROOTS=()
@@ -60,7 +60,7 @@ case "$MAX_REPOS" in ''|*[!0-9]*) MAX_REPOS=256 ;; esac
 [ "$MAX_REPOS" -lt 1 ] && MAX_REPOS=256
 if [ "$JOBS" -le 0 ]; then
   JOBS=$(nproc 2>/dev/null || echo 4)
-  [ "$JOBS" -gt 16 ] && JOBS=16
+  [ "$JOBS" -gt 4 ] && JOBS=4
 fi
 
 NOW=$(date +%s)
@@ -95,18 +95,34 @@ scan_one() {
   local rrepo="$1"
   [ -d "$rrepo" ] || return 0
 
-  local g=(git --no-optional-locks -C "$rrepo")
+  # EVERY git invocation is budgeted in time and output bytes, and runs with
+  # execution-capable repository configuration explicitly disabled. The repos
+  # under scan are DATA, not trusted workspaces: GIT_OPTIONAL_LOCKS=0 stops
+  # optional index writes but does not make repo-local config inert, and
+  # `git status` will happily invoke a configured core.fsmonitor hook, which
+  # turns "read-only scan of a copied repository" into "execute code the
+  # repository chose" (marketplace review #2899). Command-line -c has the
+  # highest config precedence, so the repo cannot override these back on.
+  rungit() { # <max_output_bytes> <git args...>
+    local cap="$1"; shift
+    timeout 5 git --no-optional-locks \
+      -c core.fsmonitor=false -c core.untrackedCache=false -c core.hooksPath=/dev/null \
+      -C "$rrepo" "$@" 2>/dev/null | head -c "$cap" || true
+  }
 
   local branch detached
-  branch=$("${g[@]}" symbolic-ref --quiet --short HEAD 2>/dev/null || echo "")
+  branch=$(rungit 4096 symbolic-ref --quiet --short HEAD)
   detached=false
   if [ -z "$branch" ]; then
     detached=true
-    branch=$("${g[@]}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    branch=$(rungit 4096 rev-parse --short HEAD); [ -n "$branch" ] || branch="unknown"
   fi
+  branch="${branch:0:200}"
 
   local status_out dirty
-  status_out=$("${g[@]}" status --porcelain --untracked-files=normal 2>/dev/null)
+  # 256 KiB of porcelain is thousands of paths; an adversarial repo with more
+  # gets counted against the truncated capture rather than buffered whole.
+  status_out=$(rungit 262144 status --porcelain --untracked-files=normal)
   dirty=$(printf '%s' "$status_out" | grep -c . || true)
   case "$dirty" in ''|*[!0-9]*) dirty=0 ;; esac
 
@@ -124,12 +140,12 @@ scan_one() {
   fi
 
   local ahead=0 ahead_age=0 upstream oldest
-  upstream=$("${g[@]}" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || echo "")
+  upstream=$(rungit 4096 rev-parse --abbrev-ref --symbolic-full-name '@{upstream}')
   if [ -n "$upstream" ]; then
-    ahead=$("${g[@]}" rev-list --count "$upstream"..HEAD 2>/dev/null || echo 0)
+    ahead=$(rungit 64 rev-list --count "$upstream"..HEAD); [ -n "$ahead" ] || ahead=0
     case "$ahead" in ''|*[!0-9]*) ahead=0 ;; esac
     if [ "$ahead" -gt 0 ]; then
-      oldest=$("${g[@]}" log --format=%ct "$upstream"..HEAD 2>/dev/null | tail -1)
+      oldest=$(rungit 65536 log --format=%ct "$upstream"..HEAD | tail -1)
       case "$oldest" in ''|*[!0-9]*) oldest=0 ;; esac
       [ "$oldest" -gt 0 ] && ahead_age=$(( NOW - oldest ))
     fi
@@ -143,10 +159,10 @@ scan_one() {
       stale_stash=$(( stale_stash + 1 ))
       [ "$age" -gt "$stash_age" ] && stash_age=$age
     fi
-  done <<< "$("${g[@]}" stash list --format=%ct 2>/dev/null)"
+  done <<< "$(rungit 65536 stash list --format=%ct)"
 
   local interrupted="" gd
-  gd=$("${g[@]}" rev-parse --git-dir 2>/dev/null || echo "")
+  gd=$(rungit 4096 rev-parse --git-dir)
   if [ -n "$gd" ]; then
     case "$gd" in /*) ;; *) gd="$rrepo/$gd" ;; esac
     if [ -d "$gd/rebase-merge" ] || [ -d "$gd/rebase-apply" ]; then interrupted="rebase"; fi
@@ -186,22 +202,37 @@ fi
 self="$0"
 repolist=$(mktemp -t loose-ends-repolist-XXXXXX)
 trap 'rm -f "$repolist"' EXIT
+# The enumeration itself is budgeted BEFORE anything is stored or sorted. The
+# old shape (find | ... | sort -zu, cap applied afterwards) meant sort had
+# already enumerated, stored and sorted every matching .git under the roots
+# before MAX_REPOS limited anything, so a huge or adversarial tree cost real
+# CPU, memory and disk on every five-minute scan (marketplace review #2899).
+# head -z between find and the rest SIGPIPE-terminates find the moment the
+# entry budget is reached, the per-root timeout bounds the walk in time, and a
+# second aggregate head caps what sort can ever see across all roots. Hitting
+# the budget marks the result truncated rather than pretending completeness.
+ENUM_BUDGET=$(( MAX_REPOS * 4 ))
+enum_hit_budget=false
 {
   for raw_root in "${ROOTS[@]}"; do
     root=$(realpath -e -- "$raw_root" 2>/dev/null) || continue
     [ -d "$root" ] || continue
-    find "$root" -xdev -maxdepth "$MAXDEPTH" -type d -name .git -print0 2>/dev/null | while IFS= read -r -d '' gitdir; do
+    timeout 20 find "$root" -xdev -maxdepth "$MAXDEPTH" -type d -name .git -print0 2>/dev/null \
+      | head -z -n "$ENUM_BUDGET" \
+      | while IFS= read -r -d '' gitdir; do
       repo=$(dirname -- "$gitdir")
       rrepo=$(realpath -e -- "$repo" 2>/dev/null) || continue
       # Confinement: the RESOLVED repo must still live under the RESOLVED root.
       case "$rrepo/" in "$root"/*) printf '%s\0' "$rrepo" ;; esac
     done
-  done | sort -zu
+  done | head -z -n "$ENUM_BUDGET" | sort -zu
 } > "$repolist"
 repo_total=$(tr -cd '\0' < "$repolist" | wc -c | tr -d ' ')
 case "$repo_total" in ''|*[!0-9]*) repo_total=0 ;; esac
 truncated=false
 [ "$repo_total" -gt "$MAX_REPOS" ] && truncated=true
+# At the enumeration budget we cannot know what the walk never saw; say so.
+[ "$repo_total" -ge "$ENUM_BUDGET" ] && truncated=true
 
 emit_head "$repo_total" "$truncated"
 if [ "$repo_total" -gt 0 ]; then
