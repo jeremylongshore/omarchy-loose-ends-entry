@@ -18,16 +18,18 @@ Panel {
   property var hostWidget: null
   readonly property var barIdentity: hostWidget || root
   readonly property string scannerPath: Qt.resolvedUrl("bin/loose-ends-scan").toString().replace(/^file:\/\//, "")
-  readonly property string scanRoot: Quickshell.env("HOME")
+  readonly property string scanOverride: Quickshell.env("OMARCHY_LOOSE_ENDS_ROOT")
+  readonly property string scanRoot: scanOverride !== "" ? scanOverride : Quickshell.env("HOME")
   readonly property int refreshSec: 300
   property var rows: []
   property bool loaded: false
   property bool scanTruncated: false
+  property bool scanFailed: false
   property int repoTotal: 0
   property double nowMs: Date.now()
   readonly property bool isAlert: Model.pillSeverity(rows) === "stale" || Model.pillSeverity(rows) === "urgent"
-  readonly property string label: loaded ? Model.pillText(rows) : "…"
-  readonly property string tooltip: loaded ? Model.tooltipText(rows) : "Scanning local git repositories…"
+  readonly property string label: loaded ? ((scanFailed || (scanTruncated && rows.length === 0)) ? "GIT ?" : Model.pillText(rows)) : "…"
+  readonly property string tooltip: !loaded ? "Scanning local git repositories…" : (scanFailed ? "Repository scan failed; last known queue retained" : (scanTruncated ? "Partial repository scan: " + rows.length + " loose ends found" : Model.tooltipText(rows)))
 
   function open() { openedFromHotkey = false; root.controller.show(); root.refresh() }
   function openFromHotkey() { openedFromHotkey = true; root.controller.show(); root.refresh() }
@@ -49,7 +51,8 @@ Panel {
         var parsed = Model.parseScan(text)
         // A malformed scan is not a clean machine. Keep the last known queue.
         var info = Model.scanInfo(text)
-        if (info.valid) { root.rows = parsed; root.repoTotal = info.repoTotal; root.scanTruncated = info.truncated; root.loaded = true }
+        if (info.valid) { root.rows = parsed; root.repoTotal = info.repoTotal; root.scanTruncated = info.truncated; root.scanFailed = false; root.loaded = true }
+        else { root.scanFailed = true; root.loaded = true }
       }
     }
   }
@@ -98,10 +101,11 @@ Panel {
           width: parent.width
           spacing: Style.space(10)
           PanelHero {
-            title: !root.loaded ? "SCANNING YOUR GIT WORK" : (root.rows.length === 0 ? "NO LOOSE ENDS" : root.rows.length + " REPOSITORIES NEED YOU")
+            title: !root.loaded ? "SCANNING YOUR GIT WORK" : (root.scanFailed && root.rows.length === 0 ? "SCAN UNAVAILABLE" : (root.scanTruncated && root.rows.length === 0 ? "PARTIAL SCAN: NONE FOUND" : (root.rows.length === 0 ? "NO LOOSE ENDS" : root.rows.length + " REPOSITORIES NEED YOU")))
             meta: !root.loaded ? "Reading local repositories only. No network, account, or key."
-              : (root.rows.length === 0 ? "Everything is committed, pushed, and free of old stashes."
-                 : (root.scanTruncated ? "Showing the first " + root.rows.length + " of " + root.repoTotal + " repositories." : "Oldest first. Stale work wins."))
+              : (root.scanFailed ? (root.rows.length ? "Last scan failed. Showing the last known queue." : "Repository scan failed safely. Refresh to retry.")
+                 : (root.scanTruncated ? "Discovery hit its safety cap. Showing " + root.rows.length + " loose ends found within it."
+                    : (root.rows.length === 0 ? "Everything is committed, pushed, and free of old stashes." : "Oldest first. Stale work wins.")))
             foreground: root.bar ? root.bar.foreground : Color.foreground
             fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
           }
@@ -116,6 +120,10 @@ Panel {
                 required property var modelData
                 width: contentColumn.width
                 height: Style.space(38)
+                readonly property real severityHue: Model.severityHue(modelData.severity)
+                readonly property color severityColor: Qt.hsla(severityHue, 0.56, 0.64, 1)
+                Rectangle { anchors.fill: parent; anchors.leftMargin: Style.space(8); anchors.rightMargin: Style.space(8); radius: Style.space(4); color: Qt.hsla(parent.severityHue, 0.48, 0.50, parent.modelData.severity === "fresh" ? 0.035 : 0.10) }
+                Rectangle { visible: parent.modelData.severity !== "fresh"; anchors.left: parent.left; anchors.leftMargin: Style.space(8); anchors.verticalCenter: parent.verticalCenter; width: Style.space(3); height: parent.height - Style.space(8); radius: width / 2; color: parent.severityColor }
                 Column {
                   anchors.left: parent.left
                   anchors.leftMargin: Style.space(16)
@@ -130,7 +138,7 @@ Panel {
                       textFormat: Text.PlainText
                       width: parent.width * 0.62
                       elide: Text.ElideRight
-                      color: root.bar ? root.bar.foreground : Color.foreground
+                      color: modelData.severity === "fresh" ? (root.bar ? root.bar.foreground : Color.foreground) : severityColor
                       font.family: root.bar ? root.bar.fontFamily : Style.font.family
                       font.pixelSize: Style.font.body
                       font.bold: modelData.severity === "stale" || modelData.severity === "urgent"

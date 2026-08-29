@@ -9,10 +9,15 @@ Loose Ends scans local repositories under your home directory every five minutes
 and shows work worth returning to: stale uncommitted edits, unpushed commits,
 old stashes, detached heads, and interrupted Git operations.
 
-It makes no network calls and has no write access to your repositories. Git runs
-with `--no-optional-locks`; this widget only reads. The scan is bounded, and the
-panel shows the oldest item first so you can decide what to finish, push, or
-discard.
+It makes no network calls and does not intentionally modify repositories. Every
+Git command runs with optional locks disabled, repository-selected hooks and
+filesystem monitors disabled, and strict time and output limits. Repository
+discovery is bounded before sorting, uses no named temporary file, and reports
+when its safety cap makes a scan partial. The panel shows the oldest item first
+so you can decide what to finish, push, or discard.
+
+To scan a narrower tree, set `OMARCHY_LOOSE_ENDS_ROOT` in the graphical session
+environment before starting the Omarchy shell. The default remains `$HOME`.
 
 ## Install
 

@@ -52,6 +52,7 @@ REMOTE="$(mktemp -t rigrender-XXXXXX.sh)"
 trap 'rm -f "$TGZ" "$REMOTE"' EXIT
 cat > "$REMOTE" <<REMOTE_EOF
 #!/bin/sh
+set -eu
 MOD="$MOD"; NAME="$NAME"; RES="$RES"
 export XDG_RUNTIME_DIR=/tmp/xdgrt
 mkdir -p \$XDG_RUNTIME_DIR; chmod 700 \$XDG_RUNTIME_DIR
@@ -80,6 +81,49 @@ done
 rm -rf /root/.config/omarchy/plugins/\$NAME
 mkdir -p /root/.config/omarchy/plugins/\$NAME
 tar xzf /tmp/rigrender.tgz -C /root/.config/omarchy/plugins/\$NAME
+
+# Build a local four-repository story for this plugin's evidence image. The
+# real scanner and real Git commands run against these disposable fixtures.
+FIXTURE_ROOT=/tmp/loose-ends-fixtures
+if [ -d "\$FIXTURE_ROOT" ]; then find "\$FIXTURE_ROOT" -depth -delete; fi
+mkdir -p "\$FIXTURE_ROOT"
+make_repo() {
+  repo="\$1"
+  mkdir -p "\$repo"
+  git init -q "\$repo"
+  git -C "\$repo" config user.email fixture@example.invalid
+  git -C "\$repo" config user.name 'Rig Fixture'
+  printf base > "\$repo/tracked.txt"
+  git -C "\$repo" add tracked.txt
+  git -C "\$repo" commit -qm initial
+}
+
+make_repo "\$FIXTURE_ROOT/release-train"
+git -C "\$FIXTURE_ROOT/release-train" rev-parse HEAD > "\$FIXTURE_ROOT/release-train/.git/MERGE_HEAD"
+
+make_repo "\$FIXTURE_ROOT/client-redesign"
+printf changed > "\$FIXTURE_ROOT/client-redesign/tracked.txt"
+touch -d '18 days ago' "\$FIXTURE_ROOT/client-redesign/tracked.txt"
+
+make_repo "\$FIXTURE_ROOT/api-migration"
+git init --bare -q "\$FIXTURE_ROOT/api-remote.git"
+git -C "\$FIXTURE_ROOT/api-migration" remote add origin "\$FIXTURE_ROOT/api-remote.git"
+git -C "\$FIXTURE_ROOT/api-migration" push -qu origin HEAD
+api_branch=\$(git -C "\$FIXTURE_ROOT/api-migration" symbolic-ref --short HEAD)
+git -C "\$FIXTURE_ROOT/api-migration" branch --set-upstream-to="origin/\$api_branch" >/dev/null
+printf second > "\$FIXTURE_ROOT/api-migration/tracked.txt"
+git -C "\$FIXTURE_ROOT/api-migration" add tracked.txt
+ahead_date=\$(date -d '9 days ago' '+%Y-%m-%dT%H:%M:%S%z')
+GIT_AUTHOR_DATE="\$ahead_date" GIT_COMMITTER_DATE="\$ahead_date" \
+  git -C "\$FIXTURE_ROOT/api-migration" commit -qm 'local migration'
+
+make_repo "\$FIXTURE_ROOT/forgotten-stash"
+printf deferred > "\$FIXTURE_ROOT/forgotten-stash/tracked.txt"
+stash_date=\$(date -d '20 days ago' '+%Y-%m-%dT%H:%M:%S%z')
+GIT_AUTHOR_DATE="\$stash_date" GIT_COMMITTER_DATE="\$stash_date" \
+  git -C "\$FIXTURE_ROOT/forgotten-stash" stash push -qm 'deferred cleanup'
+
+export OMARCHY_LOOSE_ENDS_ROOT="\$FIXTURE_ROOT"
 
 mkdir -p /root/.config/omarchy
 cat > /root/.config/omarchy/shell.json <<JSON

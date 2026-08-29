@@ -41,7 +41,7 @@ git -C "$CANON_REPO" diff --quiet 2>/dev/null || DIRTY=" (DIRTY WORKTREE)"
 #
 # Deliberately excluded: c32 and c33 need rig binaries and gate_skip off-rig;
 # c37 needs a rig round trip and is enforced at submission time by the hook.
-APPLICABLE="c28 c29 c30 c31 c34 c35 c36 c38 c40"
+APPLICABLE="c28 c29 c30 c31 c34 c35 c36 c38 c40 c41 c42"
 
 mkdir -p "$DEST/lib"
 copied=0

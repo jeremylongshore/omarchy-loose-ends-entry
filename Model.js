@@ -82,6 +82,13 @@ function severity(r) {
   return "fresh"
 }
 
+function severityHue(level) {
+  if (level === "urgent") return 0.00
+  if (level === "stale") return 0.055
+  if (level === "warn") return 0.12
+  return 0.48
+}
+
 // Parse the scanner's output into display rows. Malformed input returns the empty
 // shape so the panel keeps last-good state rather than tearing itself down. A
 // scanner that fails should read as "nothing new", never as "everything is fine".
@@ -175,6 +182,7 @@ var Model = {
   summarize: summarize,
   humanAge: humanAge,
   severity: severity,
+  severityHue: severityHue,
   isScanEnvelope: isScanEnvelope,
   scanInfo: scanInfo,
   parseScan: parseScan,

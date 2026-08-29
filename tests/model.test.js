@@ -63,6 +63,10 @@ test("interrupted work outranks age and drives the urgent pill", () => {
   assert.equal(rows[0].severity, "urgent")
   assert.equal(Model.pillText(rows), "merge")
   assert.equal(Model.pillSeverity(rows), "urgent")
+  assert.equal(Model.severityHue("urgent"), 0)
+  assert.equal(Model.severityHue("stale"), 0.055)
+  assert.equal(Model.severityHue("warn"), 0.12)
+  assert.equal(Model.severityHue("fresh"), 0.48)
 })
 
 test("ages stay intentionally coarse and the quiet state collapses the pill", () => {

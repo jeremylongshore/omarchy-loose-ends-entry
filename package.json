@@ -4,7 +4,7 @@
   "private": true,
   "description": "Local-only Git loose-end queue for the Omarchy bar",
   "scripts": {
-    "test": "c8 --all --include=Model.js --check-coverage --lines 95 --functions 95 --branches 90 node --test tests/*.test.js"
+    "test": "bash -n bin/loose-ends-scan && c8 --all --include=Model.js --check-coverage --lines 95 --functions 95 --branches 90 node --test tests/*.test.js"
   },
   "devDependencies": {
     "c8": "^10.1.3"

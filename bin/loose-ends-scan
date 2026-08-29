@@ -58,10 +58,13 @@ case "$STASH_AGE_DAYS" in ''|*[!0-9]*) STASH_AGE_DAYS=7 ;; esac
 case "$JOBS" in ''|*[!0-9]*) JOBS=0 ;; esac
 case "$MAX_REPOS" in ''|*[!0-9]*) MAX_REPOS=256 ;; esac
 [ "$MAX_REPOS" -lt 1 ] && MAX_REPOS=256
+[ "$MAX_REPOS" -gt 256 ] && MAX_REPOS=256
+[ "$MAXDEPTH" -gt 8 ] && MAXDEPTH=8
+[ "$STASH_AGE_DAYS" -gt 3650 ] && STASH_AGE_DAYS=3650
 if [ "$JOBS" -le 0 ]; then
   JOBS=$(nproc 2>/dev/null || echo 4)
-  [ "$JOBS" -gt 4 ] && JOBS=4
 fi
+[ "$JOBS" -gt 4 ] && JOBS=4
 
 NOW=$(date +%s)
 
@@ -181,7 +184,7 @@ scan_one() {
   [ "$touched" -gt 0 ] && dirty_age=$(( NOW - touched ))
 
   printf '{"path":"%s","name":"%s","branch":"%s","detached":%s,"dirty":%s,"dirtyAge":%s,"ahead":%s,"aheadAge":%s,"staleStash":%s,"stashAge":%s,"interrupted":"%s"}\n' \
-    "$(json_escape "$rrepo")" \
+    "$(json_escape "${rrepo:0:1024}")" \
     "$(json_escape "$(basename -- "$rrepo")")" \
     "$(json_escape "$branch")" \
     "$detached" "$dirty" "$dirty_age" "$ahead" "$ahead_age" \
@@ -200,8 +203,6 @@ fi
 # interval and therefore not shippable. Fanning out across cores brings it to
 # single-digit seconds.
 self="$0"
-repolist=$(mktemp -t loose-ends-repolist-XXXXXX)
-trap 'rm -f "$repolist"' EXIT
 # The enumeration itself is budgeted BEFORE anything is stored or sorted. The
 # old shape (find | ... | sort -zu, cap applied afterwards) meant sort had
 # already enumerated, stored and sorted every matching .git under the roots
@@ -212,8 +213,10 @@ trap 'rm -f "$repolist"' EXIT
 # second aggregate head caps what sort can ever see across all roots. Hitting
 # the budget marks the result truncated rather than pretending completeness.
 ENUM_BUDGET=$(( MAX_REPOS * 4 ))
-enum_hit_budget=false
-{
+repos=()
+while IFS= read -r -d '' repo; do
+  repos+=("$repo")
+done < <({
   for raw_root in "${ROOTS[@]}"; do
     root=$(realpath -e -- "$raw_root" 2>/dev/null) || continue
     [ -d "$root" ] || continue
@@ -226,9 +229,8 @@ enum_hit_budget=false
       case "$rrepo/" in "$root"/*) printf '%s\0' "$rrepo" ;; esac
     done
   done | head -z -n "$ENUM_BUDGET" | sort -zu
-} > "$repolist"
-repo_total=$(tr -cd '\0' < "$repolist" | wc -c | tr -d ' ')
-case "$repo_total" in ''|*[!0-9]*) repo_total=0 ;; esac
+})
+repo_total=${#repos[@]}
 truncated=false
 [ "$repo_total" -gt "$MAX_REPOS" ] && truncated=true
 # At the enumeration budget we cannot know what the walk never saw; say so.
@@ -236,7 +238,7 @@ truncated=false
 
 emit_head "$repo_total" "$truncated"
 if [ "$repo_total" -gt 0 ]; then
-  head -z -n "$MAX_REPOS" "$repolist" \
+  printf '%s\0' "${repos[@]:0:MAX_REPOS}" \
     | xargs -r -0 -P "$JOBS" -I{} "$self" --stash-age-days "$STASH_AGE_DAYS" --one {} \
     | paste -sd, -
 fi
