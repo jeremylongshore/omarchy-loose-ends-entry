@@ -7,6 +7,6 @@
     "test": "bash -n bin/loose-ends-scan && c8 --all --include=Model.js --check-coverage --lines 95 --functions 95 --branches 90 node --test tests/*.test.js"
   },
   "devDependencies": {
-    "c8": "^10.1.3"
+    "c8": "^12.0.0"
   }
 }
