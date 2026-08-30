@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "Jeremy Longshore",
   "license": "MIT",
-  "description": "The unfinished Git work on your machine, as a drainable queue in the Omarchy bar.",
+  "description": "Loose Ends turns unfinished local Git work into a quiet Omarchy bar queue. Every five minutes it scans repositories under your home directory, then puts the oldest work first: stale uncommitted edits, unpushed commits, old stashes, detached heads, and interrupted rebases, merges, cherry-picks, or bisects. It makes no network calls and does not intentionally modify repositories. Discovery and Git reads are time and size bounded; if the scan hits its safety cap, the panel says so. All stays local.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Loose Ends",
-    "description": "Scans local Git repositories for stale edits, unpushed commits, old stashes, detached heads, and interrupted operations. The bar shows the count; the panel puts the oldest work first.",
+    "description": "Loose Ends turns unfinished local Git work into a quiet Omarchy bar queue. Every five minutes it scans repositories under your home directory, then puts the oldest work first: stale uncommitted edits, unpushed commits, old stashes, detached heads, and interrupted rebases, merges, cherry-picks, or bisects. It makes no network calls and does not intentionally modify repositories. Discovery and Git reads are time and size bounded; if the scan hits its safety cap, the panel says so. All stays local.",
     "category": "Productivity",
     "aliases": [
       "loose-ends",
