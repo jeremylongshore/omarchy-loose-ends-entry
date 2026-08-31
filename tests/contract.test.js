@@ -57,6 +57,8 @@ test("render tooling requires an exact real-shell receipt and human approval", (
 })
 
 test("deterministic render fixture exercises every Loose Ends signal", () => {
+  assert.match(read("Panel.qml"), /fittedContentWidth\(Style\.space\(640\)\)/,
+    "marketplace capture must keep the queue legible at card scale")
   const hook = read("e2e/rig-before-shell.sh")
   for (const signal of ["MERGE_HEAD", "12 days ago", "16 days ago", "9 days ago", "--detach"]) {
     assert.match(hook, new RegExp(signal))
