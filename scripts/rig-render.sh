@@ -42,7 +42,7 @@ SOURCE_COMMIT="$(git -C "$TARGET" rev-parse HEAD 2>/dev/null || printf unknown)"
 SOURCE_DIRTY=false
 if [[ "$SOURCE_COMMIT" == "unknown" ]] || \
    [[ -n "$(git -C "$TARGET" status --porcelain --untracked-files=all -- \
-     '*.qml' '*.js' manifest.json bin preview.png README.md assets/banner.svg \
+     '*.qml' '*.js' manifest.json bin README.md assets/banner.svg \
      e2e scripts/rig-render.sh 2>/dev/null)" ]]; then
   SOURCE_DIRTY=true
 fi

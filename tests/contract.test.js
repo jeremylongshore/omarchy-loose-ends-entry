@@ -47,6 +47,8 @@ test("render tooling requires an exact real-shell receipt and human approval", (
   assert.match(render, /OMARCHY_RIG_RESOLUTION:-1280x720/)
   assert.match(render, /rawShellLogSha256/)
   assert.match(render, /visualInspection:\{status:"pending"/)
+  assert.doesNotMatch(render, /bin preview\.png/,
+    "a failed capture must not poison the next source-clean retry")
   assert.match(render, /-path '\.\/e2e\/\*'/)
   assert.match(render, /rig-before-shell\.sh/)
   assert.match(render, /grim "\\\$SHOT"/)
