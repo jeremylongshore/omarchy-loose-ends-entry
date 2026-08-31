@@ -74,6 +74,8 @@ BarWidget {
     // Fresh local edits should not shout from the edge of the screen.
     active: panelLoader.item ? panelLoader.item.isAlert : false
     tooltipText: panelLoader.item ? panelLoader.item.tooltip : ""
+    Accessible.role: Accessible.Button
+    Accessible.name: root.opened ? "Close Loose Ends" : "Open Loose Ends"
 
     onPressed: function(b) {
       if (b === Qt.MiddleButton) root.refresh()

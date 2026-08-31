@@ -1,0 +1,4 @@
+# Omarchy plugin: QML frontend plus a bounded local Git scanner.
+classify_pins:
+  - frontend
+  - cli

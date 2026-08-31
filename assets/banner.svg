@@ -1,7 +1,43 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-labelledby="title desc">
-  <title id="title">Loose Ends</title><desc id="desc">A quiet Git work queue for Omarchy</desc>
-  <rect width="1280" height="360" fill="#10131c"/><path d="M0 270H1280" stroke="#3a4356"/><path d="M82 85v177m50-145v112m50-78v45" stroke="#e7b45d" stroke-width="12" stroke-linecap="round"/>
-  <circle cx="82" cy="85" r="14" fill="#e7b45d"/><circle cx="132" cy="117" r="14" fill="#e7b45d"/><circle cx="182" cy="151" r="14" fill="#e7b45d"/>
-  <text x="270" y="156" fill="#f5f1e8" font-family="monospace" font-size="62" font-weight="700" letter-spacing="5">LOOSE ENDS</text><text x="274" y="212" fill="#98a4b8" font-family="monospace" font-size="24" letter-spacing="3">RETURN TO THE WORK THAT STILL MATTERS</text>
-  <text x="274" y="286" fill="#e7b45d" font-family="monospace" font-size="18">LOCAL GIT QUEUE · NO NETWORK · OLDEST FIRST</text>
+  <title id="title">Loose Ends</title>
+  <desc id="desc">An oldest-first local Git work queue showing interrupted work, stashes, edits, and unpushed commits</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0e1118"/>
+      <stop offset="1" stop-color="#211d22"/>
+    </linearGradient>
+    <linearGradient id="thread" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e7b45d"/>
+      <stop offset="1" stop-color="#f07878"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="360" fill="url(#bg)"/>
+  <g transform="translate(58 42)">
+    <rect width="430" height="276" rx="18" fill="#151821" stroke="#4c566d" stroke-width="2"/>
+    <text x="24" y="35" fill="#f5f1e8" font-family="monospace" font-size="16" font-weight="700">4 REPOSITORIES NEED YOU</text>
+    <text x="24" y="56" fill="#8994a8" font-family="monospace" font-size="11">OLDEST FIRST. STALE WORK WINS.</text>
+    <g font-family="monospace">
+      <rect x="20" y="72" width="390" height="42" rx="7" fill="#2d2025" stroke="#5f3339"/>
+      <rect x="20" y="72" width="4" height="42" rx="2" fill="#f07878"/>
+      <text x="34" y="91" fill="#f07878" font-size="14" font-weight="700">release-train</text><text x="34" y="106" fill="#9c7b82" font-size="11">merge in progress</text><text x="348" y="97" fill="#b5a1a5" font-size="11">NOW</text>
+      <rect x="20" y="121" width="390" height="42" rx="7" fill="#2a2422" stroke="#5a4430"/>
+      <rect x="20" y="121" width="4" height="42" rx="2" fill="#e7a45d"/>
+      <text x="34" y="140" fill="#edb06d" font-size="14" font-weight="700">forgotten-stash</text><text x="34" y="155" fill="#99877a" font-size="11">1 old stash</text><text x="335" y="146" fill="#b5a89f" font-size="11">2 WEEKS</text>
+      <rect x="20" y="170" width="390" height="42" rx="7" fill="#262321" stroke="#51473a"/>
+      <rect x="20" y="170" width="4" height="42" rx="2" fill="#d9bf68"/>
+      <text x="34" y="189" fill="#d9bf68" font-size="14" font-weight="700">client-redesign</text><text x="34" y="204" fill="#968d70" font-size="11">1 uncommitted</text><text x="335" y="195" fill="#ada68e" font-size="11">9 DAYS</text>
+      <rect x="20" y="219" width="390" height="42" rx="7" fill="#20231f" stroke="#41493c"/>
+      <rect x="20" y="219" width="4" height="42" rx="2" fill="#b7c76b"/>
+      <text x="34" y="238" fill="#c4d177" font-size="14" font-weight="700">api-migration</text><text x="34" y="253" fill="#858e70" font-size="11">1 unpushed</text><text x="342" y="244" fill="#9ca48d" font-size="11">4 DAYS</text>
+    </g>
+  </g>
+  <g transform="translate(548 69)">
+    <path d="M0 38H72M28 8v60M50 20v88M72 38v104" stroke="url(#thread)" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="28" cy="8" r="8" fill="#e7b45d"/><circle cx="50" cy="20" r="8" fill="#e99a66"/><circle cx="72" cy="38" r="8" fill="#f07878"/>
+    <text x="112" y="65" fill="#f5f1e8" font-family="monospace" font-size="62" font-weight="700" letter-spacing="5">LOOSE ENDS</text>
+    <text x="4" y="132" fill="#a5afc0" font-family="monospace" font-size="22" letter-spacing="2">THE GIT WORK YOU MEANT TO RETURN TO</text>
+    <path d="M4 160H648" stroke="#343a49"/>
+    <text x="4" y="194" fill="#e7b45d" font-family="monospace" font-size="16">LOCAL GIT QUEUE  /  NO NETWORK  /  OLDEST FIRST</text>
+    <text x="4" y="224" fill="#7e889a" font-family="monospace" font-size="13">5 MIN REFRESH  ·  256 REPO CAP  ·  READ-ONLY INTENT</text>
+  </g>
 </svg>

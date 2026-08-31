@@ -2,7 +2,9 @@ name: test
 on:
   workflow_dispatch:
   push:
-  pull_request:
+pull_request:
+permissions:
+  contents: read
 jobs:
   unit:
     runs-on: ubuntu-latest
@@ -14,7 +16,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Race-suite stability (three active-racer repetitions)
+        run: npm run test:race
+      - name: Mutation quality floor
+        run: npm run test:mutation
+      - name: Deterministic audit profile
+        run: npm run audit
       - name: ShellCheck runtime, developer, and rig scripts
         run: |
           shellcheck --version
-          shellcheck --severity=warning bin/loose-ends-scan scripts/*.sh .githooks/pre-push
+          shellcheck --severity=warning bin/loose-ends-scan scripts/*.sh e2e/*.sh .githooks/pre-push
