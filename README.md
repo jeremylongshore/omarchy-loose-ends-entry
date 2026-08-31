@@ -13,8 +13,9 @@ It makes no network calls and does not intentionally modify repositories. Every
 Git command runs with optional locks disabled, repository-selected hooks and
 filesystem monitors disabled, and strict time and output limits. Repository
 discovery is bounded before sorting, uses no named temporary file, and reports
-when its safety cap makes a scan partial. The panel shows the oldest item first
-so you can decide what to finish, push, or discard.
+when its safety cap makes a scan partial. The panel surfaces interrupted Git
+operations urgently, then orders ordinary loose ends oldest first so you can
+decide what to finish, push, or discard.
 
 To scan a narrower tree, set `OMARCHY_LOOSE_ENDS_ROOT` in the graphical session
 environment before starting the Omarchy shell. The default remains `$HOME`.

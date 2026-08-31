@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "Jeremy Longshore",
   "license": "MIT",
-  "description": "Loose Ends turns unfinished local Git work into a quiet Omarchy bar queue. Every five minutes it scans repositories under your home directory, then puts the oldest work first: stale uncommitted edits, unpushed commits, old stashes, detached heads, and interrupted rebases, merges, cherry-picks, or bisects. It makes no network calls and does not intentionally modify repositories. Discovery and Git reads are time and size bounded; if the scan hits its safety cap, the panel says so. All stays local.",
+  "description": "Loose Ends turns unfinished local Git work into a quiet local Omarchy bar queue. Every five minutes it scans repositories under home for uncommitted edits, unpushed commits, old stashes, detached heads, and interrupted rebases, merges, cherry-picks, or bisects. It surfaces interrupted work urgently, otherwise oldest first. It makes no network calls and does not modify repositories. Discovery and Git reads are time and size bounded; if a cap is reached, the panel clearly says the scan is partial.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Loose Ends",
-    "description": "Loose Ends turns unfinished local Git work into a quiet Omarchy bar queue. Every five minutes it scans repositories under your home directory, then puts the oldest work first: stale uncommitted edits, unpushed commits, old stashes, detached heads, and interrupted rebases, merges, cherry-picks, or bisects. It makes no network calls and does not intentionally modify repositories. Discovery and Git reads are time and size bounded; if the scan hits its safety cap, the panel says so. All stays local.",
+    "description": "Loose Ends turns unfinished local Git work into a quiet local Omarchy bar queue. Every five minutes it scans repositories under home for uncommitted edits, unpushed commits, old stashes, detached heads, and interrupted rebases, merges, cherry-picks, or bisects. It surfaces interrupted work urgently, otherwise oldest first. It makes no network calls and does not modify repositories. Discovery and Git reads are time and size bounded; if a cap is reached, the panel clearly says the scan is partial.",
     "category": "Productivity",
     "aliases": [
       "loose-ends",

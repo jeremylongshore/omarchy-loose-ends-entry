@@ -17,7 +17,12 @@ test("marketplace copy uses all 500 characters for one evidenced story", () => {
   assert.equal(manifest.description.length, 500)
   assert.equal(manifest.barWidget.description.length, 500)
   assert.equal(manifest.barWidget.description, manifest.description)
-  for (const claim of ["Every five minutes", "unpushed commits", "old stashes", "detached heads", "interrupted rebases", "no network calls", "safety cap"]) assert.match(manifest.description, new RegExp(claim))
+  for (const claim of [
+    "Every five minutes", "uncommitted edits", "unpushed commits", "old stashes",
+    "detached heads", "interrupted rebases, merges, cherry-picks, or bisects",
+    "interrupted work urgently", "no network calls", "does not modify repositories",
+    "time and size bounded", "scan is partial"
+  ]) assert.match(manifest.description, new RegExp(claim))
 })
 
 test("QML launches one bounded scanner command and keeps last known rows on failure", () => {

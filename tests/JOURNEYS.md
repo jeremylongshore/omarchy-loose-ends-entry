@@ -3,7 +3,7 @@
 ## Find forgotten work
 
 The five-minute local scan discovers genuine loose ends, orders interrupted or
-oldest work first, renders bounded plain-text rows, and collapses the bar when
+interrupted work first and ordinary work oldest first, renders bounded plain-text rows, and collapses the bar when
 the queue is empty.
 
 ## Fail safely and ship honestly
