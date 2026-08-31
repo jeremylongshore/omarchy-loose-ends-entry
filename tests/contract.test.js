@@ -72,3 +72,9 @@ test("deterministic render fixture exercises every Loose Ends signal", () => {
   assert.doesNotMatch(hook, /https?:|curl|wget/)
   assert.equal(fs.statSync(path.join(root, "e2e/rig-before-shell.sh")).mode & 0o111, 0o111)
 })
+
+test("test workflow keeps all triggers under the on mapping", () => {
+  const workflow = read(".github/workflows/test.yml")
+  assert.match(workflow, /^on:\n  workflow_dispatch:\n  push:\n  pull_request:\n/m)
+  assert.doesNotMatch(workflow, /^pull_request:/m)
+})
