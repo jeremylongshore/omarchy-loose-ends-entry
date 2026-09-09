@@ -6,7 +6,7 @@ const path = require("node:path")
 const { spawnSync } = require("node:child_process")
 
 const sourceSync = path.join(__dirname, "..", "scripts", "sync-gate-lane.sh")
-const applicable = ["c28", "c29", "c30", "c31", "c34", "c35", "c36", "c38", "c40", "c41", "c42", "c43"]
+const applicable = ["c28", "c29", "c30", "c31", "c34", "c35", "c36", "c38", "c40", "c41", "c42", "c43", "c44"]
 
 function git(cwd, args) {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" })
@@ -39,7 +39,7 @@ test("sync records an exact clean canonical commit and complete denominator", ()
     const manifest = fs.readFileSync(path.join(f.scripts, "gates", ".lane-manifest"), "utf8")
     const commit = spawnSync("git", ["-C", f.canonical, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim()
     assert.match(manifest, new RegExp(`canonical: contributing-clanker@${commit}`))
-    assert.equal(manifest.split("\n").filter((line) => /^[a-f0-9]{64}  /.test(line)).length, 13)
+    assert.equal(manifest.split("\n").filter((line) => /^[a-f0-9]{64}  /.test(line)).length, 14)
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true })
   }
