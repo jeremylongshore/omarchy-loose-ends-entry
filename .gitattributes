@@ -1,0 +1,12 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.webp binary
+*.woff2 binary
+
+scripts/gates/** linguist-vendored
+tests/fixtures/** linguist-generated
+.rig-proof.json linguist-generated
+.render-proof.json linguist-generated
+CHANGELOG.md linguist-generated
