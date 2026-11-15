@@ -1,6 +1,6 @@
 {
   "name": "omarchy-loose-ends-entry",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Local-only Git loose-end queue for the Omarchy bar",
   "scripts": {
