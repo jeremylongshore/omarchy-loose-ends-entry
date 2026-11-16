@@ -15,13 +15,16 @@ Loose Ends scans local repositories under your home directory every five minutes
 and shows work worth returning to: stale uncommitted edits, unpushed commits,
 old stashes, detached heads, and interrupted Git operations.
 
-It makes no network calls and does not intentionally modify repositories. Every
-Git command runs with optional locks disabled, repository-selected hooks and
-filesystem monitors disabled, and strict time and output limits. Repository
-discovery is bounded before sorting, uses no named temporary file, and reports
-when its safety cap makes a scan partial. The panel surfaces interrupted Git
-operations urgently, then orders ordinary loose ends oldest first so you can
-decide what to finish, push, or discard.
+It makes no network calls and does not intentionally modify repositories.
+Repository names are untrusted text, so each one is stripped of angle brackets,
+control characters, bidirectional override marks and invisible tag characters,
+and length capped, before it is shown. Every Git command runs with optional
+locks disabled, repository-selected hooks and filesystem monitors disabled, and
+strict time and output limits. Repository discovery is bounded before sorting,
+uses no named temporary file, and reports when its safety cap makes a scan
+partial. The panel surfaces interrupted Git operations urgently, then orders
+ordinary loose ends oldest first so you can decide what to finish, push, or
+discard.
 
 To scan a narrower tree, set `OMARCHY_LOOSE_ENDS_ROOT` in the graphical session
 environment before starting the Omarchy shell. The default remains `$HOME`.
@@ -34,6 +37,15 @@ omarchy plugin add https://github.com/jeremylongshore/omarchy-loose-ends-entry -
 
 Middle-click the pill to refresh. The plugin also supports the normal Omarchy
 panel commands: `open`, `close`, `toggle`, and `refresh`.
+
+## What the preview shows
+
+`preview.png` is a rig render, not a screenshot of anyone's machine. The rig
+builds five throwaway repositories under a disposable home directory before the
+shell starts (an interrupted merge, a 12-day-old uncommitted edit, a 16-day-old
+stash, a commit that has waited 9 days to be pushed, and a detached head), and
+the scanner reads those. The repository names and ages in the image come from
+that fixture. A real install shows your own repositories.
 
 ## What counts as a loose end
 
