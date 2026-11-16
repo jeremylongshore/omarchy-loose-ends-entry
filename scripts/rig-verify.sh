@@ -64,7 +64,9 @@ fi
 
 TGZ="$(mktemp -t rigcheck-XXXXXX.tgz)"
 trap 'rm -f "$TGZ"' EXIT
-tar czf "$TGZ" -C "$TARGET" --exclude=.git --exclude=tests --exclude=node_modules . || {
+tar czf "$TGZ" -C "$TARGET" --exclude=.git --exclude=tests --exclude=node_modules \
+  --exclude=reports --exclude=coverage --exclude=.rig-proof.json \
+  --exclude=.render-proof.json --exclude=preview.png . || {
   echo "rig-verify: could not package the tree" >&2; exit 2; }
 ARCHIVE_SHA="$(sha256sum "$TGZ" | cut -d' ' -f1)"
 
@@ -94,8 +96,13 @@ RESULT="$(ssh "$HOST" "
   Q=\$(docker exec $CONTAINER sh -c 'cd /tmp/$NAME || exit 9; out=\$(/usr/lib/qt6/bin/qmllint *.qml 2>&1); rc=\$?; n=\$(printf %s\\\\n \"\$out\" | grep -cE \"^Error\" || true); if [ \"\$rc\" -ne 0 ] && [ \"\$n\" -eq 0 ]; then n=1; fi; echo \"\$n\"' 2>/dev/null)
   case \"\$Q\" in ''|*[!0-9]*) Q=1 ;; esac
   R=\$(docker exec $CONTAINER sha256sum /tmp/$NAME.tgz 2>/dev/null | awk '{print \$1}')
+  # Which Omarchy and Qt this receipt was recorded against. Informational: the
+  # fields are read by prefix below and never shift the receipt line.
+  OM=\$(docker exec $CONTAINER git -c safe.directory=/root/omarchy -C /root/omarchy rev-parse HEAD 2>/dev/null)
+  QV=\$(docker exec $CONTAINER /usr/lib/qt6/bin/qmllint --version 2>/dev/null | head -n1)
   docker exec $CONTAINER rm -rf /tmp/$NAME /tmp/$NAME.tgz >/dev/null 2>&1
   rm -f /tmp/$NAME.tgz
+  echo \"rigversions \$OM|\$QV\"
   echo \"\$V \$Q \$R\"
 ")" || { echo "rig-verify: rig run failed" >&2; exit 2; }
 
@@ -104,21 +111,28 @@ RESULT="$(ssh "$HOST" "
 VALIDATE="$(echo "$RESULT" | tail -n1 | awk '{print $1}')"
 QMLLINT="$(echo "$RESULT" | tail -n1 | awk '{print $2}')"
 REMOTE_SHA="$(echo "$RESULT" | tail -n1 | awk '{print $3}')"
+VERSIONS="$(echo "$RESULT" | grep '^rigversions ' | tail -n1 || true)"
+OMARCHY_REV="$(echo "$VERSIONS" | sed -n 's/^rigversions \([a-f0-9]\{40\}\)|.*/\1/p')"
+QT_VERSION="$(echo "$VERSIONS" | sed -n 's/^rigversions [a-f0-9]*|qmllint \([0-9][0-9.]*\)$/\1/p')"
 [[ "$VALIDATE" =~ ^[0-9]+$ ]] || VALIDATE=1
 [[ "$QMLLINT"  =~ ^[0-9]+$ ]] || QMLLINT=1
 [[ "$REMOTE_SHA" == "$ARCHIVE_SHA" ]] || VALIDATE=1
 
 echo "  omarchy-plugin-validate: exit $VALIDATE"
 echo "  qmllint errors:          $QMLLINT"
+echo "  omarchy revision:        ${OMARCHY_REV:-unknown}"
+echo "  qt version:              ${QT_VERSION:-unknown}"
 
 # Write the receipt even on failure. C37 reads the recorded results and blocks
 # on a non-zero one, so a failing run must not look identical to never running.
 jq -n --arg fp "$FP" --arg commit "$SOURCE_COMMIT" --argjson dirty "$SOURCE_DIRTY" \
       --arg archive "$ARCHIVE_SHA" --arg remote "$REMOTE_SHA" --arg rig "$HOST/$CONTAINER" \
       --argjson v "$VALIDATE" --argjson q "$QMLLINT" \
+      --arg omarchy "${OMARCHY_REV:-unknown}" --arg qt "${QT_VERSION:-unknown}" \
       --argjson at "$(date +%s)" --arg iso "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   '{fingerprint:$fp, sourceCommit:$commit, sourceDirty:$dirty,
     sourcePackageSha256:$archive, remotePackageSha256:$remote, rig:$rig,
+    rigVersions:{omarchy:$omarchy, qt:$qt},
     evidenceBoundary:"real Omarchy validator and qmllint; no live compositor render",
     omarchyPluginValidate:$v, qmllintErrors:$q,
     validatedAtEpoch:$at, validatedAt:$iso}' > "$TARGET/.rig-proof.json"

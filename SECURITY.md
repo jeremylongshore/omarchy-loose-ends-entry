@@ -16,7 +16,12 @@ Quickshell process. Security-sensitive changes must preserve these rules:
 - Network and local inputs are bounded by count and bytes.
 - Untrusted text renders as plain text within explicit bounds.
 - Runtime dependencies are limited to software shipped by stock Omarchy.
-- Persistent local state uses a descriptor-bound lifecycle.
+- The plugin keeps no persistent state of its own. The scanner only reads Git
+  plumbing, and the panel only holds the last scan in memory.
+- Scanner output is refused above 1 MiB before it is parsed, capped at 256
+  repositories, and every string from it is stripped of angle brackets, ASCII
+  controls, bidi override and isolate marks and Unicode tag characters, then
+  length capped, before it reaches a `Text`.
 
 Passing static gates is not a security audit. Applicable releases also require
 review and a clean real-shell verification on the maintainer rig.

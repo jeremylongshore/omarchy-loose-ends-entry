@@ -12,14 +12,29 @@
 
 // Every string that reaches a QML Text goes through this first. A bar label
 // renders as Qt AutoText, which promotes an HTML-looking string to StyledText,
-// and a repository directory is a user-controlled name. Strip angle brackets and
-// control characters, and cap the length so a pathological path cannot become a
-// layout cost.
+// and a repository directory is a user-controlled name. Strip angle brackets;
+// ASCII controls; bidi override and isolate marks (U+202A to U+202E, U+2066 to
+// U+2069, U+200E, U+200F, U+061C), which can reorder a name so one repository
+// reads as another (CVE-2021-42574 class); and Unicode tag characters (U+E0000
+// to U+E007F), which are invisible. Tag characters are the surrogate pair
+// U+DB40 then U+DC00 to U+DC7F in a JS string, so the pattern needs no `u` flag
+// and stays ES5. Then cap the length, after stripping, so a pathological path
+// cannot become a layout cost and stripped marks never eat the budget.
 function clean(value, max) {
   var s = String(value === undefined || value === null ? "" : value)
-  s = s.replace(/[<>]/g, "").replace(/[\x00-\x1f\x7f]/g, "")
+  s = s.replace(/[<>]/g, "")
+    .replace(/[\x00-\x1f\x7f]/g, "")
+    .replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/\udb40[\udc00-\udc7f]/g, "")
   var cap = max || 64
   return s.length > cap ? s.slice(0, cap) : s
+}
+
+// Panels pick text and edge lightness for the surface they sit on. Light on a
+// light popup was 1.5 to 2.8:1 on catppuccin-latte, white and flexoki-light.
+// Exactly 0.5 counts as dark, and a missing reading stays dark.
+function toneLightness(dark, light, surfaceLightness) {
+  return Number(surfaceLightness) > 0.5 ? light : dark
 }
 
 var DAY = 86400
@@ -31,6 +46,12 @@ var HOUR = 3600
 var WARN_AGE = 3 * DAY
 var STALE_AGE = 14 * DAY
 var MAX_ROWS = 256
+
+// The scanner prints at most 256 repositories, and its worst escaped row (a
+// 1024-byte path, 255-byte name and 200-byte branch, every byte escaped to two)
+// is about 3.3 KB, so 1 MiB is above anything it can print. Anything longer is
+// refused before JSON.parse sees it.
+var MAX_SCAN_CHARS = 1048576
 
 // An interrupted operation outranks everything by age, because the repository is
 // in a state nobody meant to leave it in and git will keep saying so until it is
@@ -92,23 +113,45 @@ function severityHue(level) {
 // Parse the scanner's output into display rows. Malformed input returns the empty
 // shape so the panel keeps last-good state rather than tearing itself down. A
 // scanner that fails should read as "nothing new", never as "everything is fine".
-function isScanEnvelope(raw) {
+//
+// readEnvelope is the one place scanner output is parsed. Oversized text, text
+// that is not JSON and JSON without a repos array all read as "no envelope".
+function readEnvelope(raw) {
+  var text = String(raw || "")
+  if (text.length > MAX_SCAN_CHARS) return null
   var data
-  try { data = JSON.parse(String(raw || "")) } catch (e) { return false }
-  return !!(data && Object.prototype.toString.call(data.repos) === "[object Array]")
+  try { data = JSON.parse(text) } catch (e) { return null }
+  if (!data || Object.prototype.toString.call(data.repos) !== "[object Array]") return null
+  return data
 }
 
-function scanInfo(raw) {
-  var data
-  try { data = JSON.parse(String(raw || "")) } catch (e) { return { valid: false, repoTotal: 0, truncated: false } }
-  if (!data || Object.prototype.toString.call(data.repos) !== "[object Array]") return { valid: false, repoTotal: 0, truncated: false }
+function isScanEnvelope(raw) {
+  return readEnvelope(raw) !== null
+}
+
+function envelopeInfo(data) {
+  if (!data) return { valid: false, repoTotal: 0, truncated: false }
   return { valid: true, repoTotal: Math.max(0, Number(data.repoTotal) || 0), truncated: !!data.truncated || data.repos.length > MAX_ROWS }
 }
 
+function scanInfo(raw) {
+  return envelopeInfo(readEnvelope(raw))
+}
+
 function parseScan(raw) {
-  var data
-  try { data = JSON.parse(String(raw || "")) } catch (e) { return [] }
-  if (!data || Object.prototype.toString.call(data.repos) !== "[object Array]" || !data.repos.length) return []
+  var data = readEnvelope(raw)
+  return data ? rowsOf(data) : []
+}
+
+// One parse for the panel: validity, totals, truncation and rows together.
+function readScan(raw) {
+  var data = readEnvelope(raw)
+  var info = envelopeInfo(data)
+  info.rows = data ? rowsOf(data) : []
+  return info
+}
+
+function rowsOf(data) {
   var out = []
   for (var i = 0; i < data.repos.length && i < MAX_ROWS; i++) {
     var r = data.repos[i]
@@ -185,14 +228,17 @@ var Model = {
   severityHue: severityHue,
   isScanEnvelope: isScanEnvelope,
   scanInfo: scanInfo,
+  readScan: readScan,
   parseScan: parseScan,
   sortRows: sortRows,
   pillText: pillText,
   pillSeverity: pillSeverity,
   tooltipText: tooltipText,
+  toneLightness: toneLightness,
   WARN_AGE: WARN_AGE,
-  STALE_AGE: STALE_AGE
-  , MAX_ROWS: MAX_ROWS
+  STALE_AGE: STALE_AGE,
+  MAX_ROWS: MAX_ROWS,
+  MAX_SCAN_CHARS: MAX_SCAN_CHARS
 }
 
 if (typeof module !== "undefined" && module.exports) module.exports = Model

@@ -30,6 +30,9 @@ Panel {
   property bool scanFailed: false
   property int repoTotal: 0
   property double nowMs: Date.now()
+  // Severity text and stripes are tinted for the popup surface they sit on, so
+  // they stay legible on light themes.
+  readonly property real surfaceLightness: Commons.Color.popups.background.hslLightness
   readonly property bool isAlert: Model.pillSeverity(rows) === "stale" || Model.pillSeverity(rows) === "urgent"
   readonly property string label: loaded ? ((scanFailed || (scanTruncated && rows.length === 0)) ? "GIT ?" : Model.pillText(rows)) : "…"
   readonly property string tooltip: !loaded ? "Scanning local git repositories…" : (scanFailed ? "Repository scan failed; last known queue retained" : (scanTruncated ? "Partial repository scan: " + rows.length + " loose ends found" : Model.tooltipText(rows)))
@@ -51,10 +54,10 @@ Panel {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        var parsed = Model.parseScan(text)
-        // A malformed scan is not a clean machine. Keep the last known queue.
-        var info = Model.scanInfo(text)
-        if (info.valid) { root.rows = parsed; root.repoTotal = info.repoTotal; root.scanTruncated = info.truncated; root.scanFailed = false; root.loaded = true }
+        // One bounded parse. A malformed scan is not a clean machine, so keep
+        // the last known queue.
+        var scan = Model.readScan(text)
+        if (scan.valid) { root.rows = scan.rows; root.repoTotal = scan.repoTotal; root.scanTruncated = scan.truncated; root.scanFailed = false; root.loaded = true }
         else { root.scanFailed = true; root.loaded = true }
       }
     }
@@ -126,9 +129,10 @@ Panel {
                 width: contentColumn.width
                 height: Style.space(38)
                 readonly property real severityHue: Model.severityHue(modelData.severity)
-                readonly property color severityColor: Qt.hsla(severityHue, 0.56, 0.64, 1)
+                readonly property color severityColor: Qt.hsla(severityHue, 0.56, Model.toneLightness(0.64, 0.26, root.surfaceLightness), 1)
+                readonly property color stripeColor: Qt.hsla(severityHue, 0.56, Model.toneLightness(0.64, 0.36, root.surfaceLightness), 1)
                 Rectangle { anchors.fill: parent; anchors.leftMargin: Style.space(8); anchors.rightMargin: Style.space(8); radius: Style.space(4); color: Qt.hsla(parent.severityHue, 0.48, 0.50, parent.modelData.severity === "fresh" ? 0.035 : 0.10) }
-                Rectangle { visible: parent.modelData.severity !== "fresh"; anchors.left: parent.left; anchors.leftMargin: Style.space(8); anchors.verticalCenter: parent.verticalCenter; width: Style.space(3); height: parent.height - Style.space(8); radius: width / 2; color: parent.severityColor }
+                Rectangle { visible: parent.modelData.severity !== "fresh"; anchors.left: parent.left; anchors.leftMargin: Style.space(8); anchors.verticalCenter: parent.verticalCenter; width: Style.space(3); height: parent.height - Style.space(8); radius: width / 2; color: parent.stripeColor }
                 Column {
                   anchors.left: parent.left
                   anchors.leftMargin: Style.space(16)

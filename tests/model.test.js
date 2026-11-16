@@ -196,3 +196,90 @@ test("sorting and pill severity honor rank, age, and stable name tie-breaks", ()
   assert.equal(Model.pillSeverity([{ severity: "fresh" }, { severity: "warn" }, { severity: "stale" }, { severity: "urgent" }]), "urgent")
   assert.equal(Model.pillSeverity([{ severity: "warn" }, { severity: "warn" }]), "warn")
 })
+
+test("clean strips every bidi override, isolate and mark, and nothing next to them", () => {
+  const hostile = [0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069]
+  for (const code of hostile) assert.equal(Model.clean("a" + String.fromCharCode(code) + "b"), "ab", "U+" + code.toString(16))
+  // The characters just outside each range are ordinary text and must survive.
+  const harmless = [0x061b, 0x061d, 0x200d, 0x2010, 0x2029, 0x202f, 0x2065, 0x206a, 0x00e9, 0x4e2d]
+  for (const code of harmless) assert.equal(Model.clean("a" + String.fromCharCode(code) + "b"), "a" + String.fromCharCode(code) + "b", "U+" + code.toString(16))
+})
+
+test("clean strips Unicode tag characters as surrogate pairs and keeps other astral text", () => {
+  assert.equal(Model.clean("a\udb40\udc00b"), "ab", "U+E0000")
+  assert.equal(Model.clean("a\udb40\udc41b"), "ab", "U+E0041, the invisible tag letter A")
+  assert.equal(Model.clean("a\udb40\udc7fb"), "ab", "U+E007F")
+  assert.equal(Model.clean("a\udb40\udc80b"), "a\udb40\udc80b", "U+E0080 is not a tag character")
+  assert.equal(Model.clean("a\udb3f\udfffb"), "a\udb3f\udfffb", "U+DFFFF is not a tag character")
+  assert.equal(Model.clean("a\ud83d\ude00b"), "a\ud83d\ude00b", "an emoji is ordinary text")
+  assert.equal(Model.clean("a\udb40b"), "a\udb40b", "a lone high surrogate is not a pair")
+  // A hidden payload spelled in tag characters disappears entirely.
+  const payload = "\udb40\udc72\udb40\udc6d"
+  assert.equal(Model.clean("repo" + payload), "repo")
+})
+
+test("clean caps after stripping, so hostile marks never use the visible budget", () => {
+  assert.equal(Model.clean("\u202e".repeat(500) + "abc", 5), "abc")
+  assert.equal(Model.clean("\udb40\udc41".repeat(500) + "abcdef", 4), "abcd")
+  assert.equal(Model.clean("<>".repeat(300) + "xy", 3), "xy")
+  assert.equal(Model.clean("abcdef", 3), "abc")
+})
+
+test("a repository name cannot reorder, hide text in, or markup its row", () => {
+  // The name below would display as "repo-gpj.exe" with its tail reversed.
+  const spoof = "repo-\u202eexe.jpg"
+  const rows = Model.parseScan(JSON.stringify({ repos: [{
+    path: "/home/u/" + spoof, name: spoof + "<b>", branch: "\u2066main\u2069\udb40\udc41",
+    interrupted: "mer\u202ege\udb40\udc42", dirty: 1, dirtyAge: 5
+  }] }))
+  assert.equal(rows[0].name, "repo-exe.jpgb")
+  assert.equal(rows[0].path, "/home/u/repo-exe.jpg")
+  assert.equal(rows[0].branch, "main")
+  assert.equal(rows[0].interrupted, "merge")
+  assert.equal(rows[0].severity, "urgent")
+  assert.match(rows[0].summary, /^merge in progress/)
+  for (const key of ["path", "name", "branch", "interrupted", "summary"]) assert.doesNotMatch(rows[0][key], /[\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c\udb40<>]/, key)
+})
+
+test("scanner output over the byte bound is refused before it is parsed", () => {
+  const empty = '{"repos":[]}'
+  const exact = empty + " ".repeat(Model.MAX_SCAN_CHARS - empty.length)
+  assert.equal(exact.length, Model.MAX_SCAN_CHARS)
+  assert.equal(Model.isScanEnvelope(exact), true)
+  assert.equal(Model.scanInfo(exact).valid, true)
+  assert.equal(Model.readScan(exact).valid, true)
+  const over = exact + " "
+  assert.equal(Model.isScanEnvelope(over), false)
+  assert.deepEqual(Model.scanInfo(over), { valid: false, repoTotal: 0, truncated: false })
+  assert.deepEqual(Model.parseScan(over), [])
+  assert.deepEqual(Model.readScan(over), { valid: false, repoTotal: 0, truncated: false, rows: [] })
+  // The bound sits above the largest document the scanner can print.
+  assert.ok(Model.MAX_SCAN_CHARS >= 256 * 3400)
+})
+
+test("readScan is one parse that agrees with parseScan and scanInfo", () => {
+  const raw = fixture("scan-real.json")
+  const scan = Model.readScan(raw)
+  assert.equal(scan.valid, true)
+  assert.deepEqual(scan.rows, Model.parseScan(raw))
+  const info = Model.scanInfo(raw)
+  assert.equal(scan.repoTotal, info.repoTotal)
+  assert.equal(scan.truncated, info.truncated)
+  for (const bad of ["not json", "", "null", '{"repos":{}}', '{"broken":true}']) {
+    assert.deepEqual(Model.readScan(bad), { valid: false, repoTotal: 0, truncated: false, rows: [] }, bad)
+  }
+  const partial = Model.readScan('{"repoTotal":300,"truncated":true,"repos":[{"path":"/a","name":"a","dirty":1}]}')
+  assert.deepEqual([partial.valid, partial.repoTotal, partial.truncated, partial.rows.length], [true, 300, true, 1])
+  const empty = Model.readScan('{"repos":[]}')
+  assert.deepEqual(empty, { valid: true, repoTotal: 0, truncated: false, rows: [] })
+})
+
+test("toneLightness picks the lightness for the surface a panel is drawn on", () => {
+  assert.equal(Model.toneLightness(0.64, 0.30, 0.1), 0.64)
+  assert.equal(Model.toneLightness(0.64, 0.30, 0.94), 0.30)
+  assert.equal(Model.toneLightness(0.64, 0.30, 0.5), 0.64, "exactly 0.5 stays dark")
+  assert.equal(Model.toneLightness(0.64, 0.30, 0.5001), 0.30)
+  assert.equal(Model.toneLightness(0.64, 0.30, Number.NaN), 0.64)
+  assert.equal(Model.toneLightness(0.64, 0.30, undefined), 0.64)
+  assert.equal(Model.toneLightness(0.64, 0.30, null), 0.64)
+})

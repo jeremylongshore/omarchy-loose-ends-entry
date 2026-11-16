@@ -1,27 +1,33 @@
 {
-  "fingerprint": "d45a413bc6464f1fb04ae883a4180774b2f99ef4066ddb7dd990e7c36891d9d0",
-  "sourceCommit": "333578543a8e2956c0ca12e68b10d64a52974bee",
+  "fingerprint": "4b4d1011c44f0a4b3ff44ac56d30584f03e004bc159156e57796018514511c59",
+  "sourceCommit": "447b8f0b3ba8ed64aecd341ece32cb4938668a5a",
   "sourceDirty": false,
-  "sourcePackageSha256": "f6522f4295de3d2b5607f41e0ed723a25b623f3eeb316ae61aa15829631b98ff",
-  "remotePackageSha256": "f6522f4295de3d2b5607f41e0ed723a25b623f3eeb316ae61aa15829631b98ff",
+  "sourcePackageSha256": "e6daf67531cc2cc2cca5a111317331571fe4847988816f09210dd90dabe62367",
+  "remotePackageSha256": "e6daf67531cc2cc2cca5a111317331571fe4847988816f09210dd90dabe62367",
   "rig": "intent-ops-buzz/omarchy-rig",
-  "runId": "loose-ends-138958",
-  "rawShellLogSha256": "4ff4658085fa49403bce78473b94d04819707ae94e37284d4cbc8fc1f02c81e4",
+  "runId": "loose-ends-1983256",
+  "rawShellLogSha256": "48c634a0275bbbb74b9b32da87edb3cd7f9030d9524db5d628601200e5fff2ee",
   "packageBoundary": "runtime tree; generated proof receipts, reports, tests, developer scripts, and marketplace preview excluded",
   "evidenceBoundary": "isolated real Omarchy shell and QML under a dedicated headless compositor; plugin-specific fixture hook when present; live plugin IPC toggle; direct full-frame grim capture with no crop or image post-processing",
+  "rigVersions": {
+    "omarchy": "74de10479d3bf7aa7865408e33219064cfe45432",
+    "qt": "6.12.0",
+    "quickshell": "0.3.2"
+  },
+  "theme": "tokyo-night",
   "visualInspection": {
     "status": "approved",
-    "previewSha256": "f2f76bf56ab67a322b95d7d24e4411b69e2ca5816fecf100c41c436e5975c653",
+    "previewSha256": "1e1cc9e5dde750123665317e77ea73f991b9670992c5e96be42cabba44e64553",
     "inspector": "Claude (agent) for jeremylongshore",
-    "inspectedAt": "2026-11-15T08:58:29Z",
+    "inspectedAt": "2026-11-16T00:34:21Z",
     "checks": [
       "product value visible at marketplace scale",
       "no primary content clipped",
       "plugin-specific visual identity"
     ]
   },
-  "previewSha256": "f2f76bf56ab67a322b95d7d24e4411b69e2ca5816fecf100c41c436e5975c653",
+  "previewSha256": "1e1cc9e5dde750123665317e77ea73f991b9670992c5e96be42cabba44e64553",
   "dimensions": "1280 x 720",
-  "nonblackCoverage": 0.353125,
-  "capturedAt": "2026-11-15T08:58:25Z"
+  "nonblackCoverage": 0.998078,
+  "capturedAt": "2026-11-16T00:34:13Z"
 }

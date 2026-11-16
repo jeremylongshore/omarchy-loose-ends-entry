@@ -16,11 +16,16 @@ HOST="${OMARCHY_RIG_HOST:-intent-ops-buzz}"
 CONTAINER="${OMARCHY_RIG_CONTAINER:-omarchy-rig}"
 RES="${OMARCHY_RIG_RESOLUTION:-1280x720}"
 SCALE="${OMARCHY_RIG_SCALE:-1.25}"
+# The stock theme to seed. tokyo-night is dark; pass catppuccin-latte, white or
+# flexoki-light to check a light surface. It is spliced into the remote script,
+# so it must be a plain theme name.
+THEME="${OMARCHY_RIG_THEME:-tokyo-night}"
 
 for tool in jq identify convert; do
   command -v "$tool" >/dev/null 2>&1 || { echo "rig-render: $tool is required" >&2; exit 2; }
 done
 [[ -f "$TARGET/manifest.json" ]] || { echo "rig-render: no manifest.json in $TARGET" >&2; exit 2; }
+[[ "$THEME" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "rig-render: OMARCHY_RIG_THEME must be a plain theme name" >&2; exit 2; }
 
 MOD="$(jq -r '.id // empty' "$TARGET/manifest.json")"
 [[ -n "$MOD" ]] || { echo "rig-render: manifest.json has no id" >&2; exit 2; }
@@ -82,7 +87,7 @@ scp -q -o BatchMode=yes "$TGZ" "$HOST:/tmp/rigrender-$RUN_ID.tgz" || {
 cat > "$REMOTE" <<REMOTE_EOF
 #!/bin/sh
 set -eu
-MOD="$MOD"; NAME="$NAME"; RUN_ID="$RUN_ID"; RES="$RES"; SCALE="$SCALE"
+MOD="$MOD"; NAME="$NAME"; RUN_ID="$RUN_ID"; RES="$RES"; SCALE="$SCALE"; THEME="$THEME"
 RUNTIME=/tmp/rigrender-runtime-\$RUN_ID
 RIG_ROOT=/tmp/rigrender-home-\$RUN_ID
 SWAY_CONFIG=/tmp/rigrender-sway-\$RUN_ID.conf
@@ -105,15 +110,18 @@ chmod 700 "\$RUNTIME" "\$RIG_ROOT" "\$RIG_ROOT/.config" \
   "\$RIG_ROOT/.config/omarchy" "\$RIG_ROOT/.config/omarchy/plugins" "\$PLUGIN_DIR"
 tar xzf /tmp/rigrender-\$RUN_ID.tgz -C "\$PLUGIN_DIR"
 # A real Omarchy install always has a current theme. Seed the state
-# omarchy-theme-set writes (current/theme, theme.name, background) with the stock
-# tokyo-night theme: current first-party shell plugins (image-picker, lock) read
-# it from HOME/.local/state and log QML warnings when it is missing, which would
-# otherwise read here as plugin warnings.
+# omarchy-theme-set writes (current/theme, theme.name, background) with a stock
+# theme, tokyo-night unless OMARCHY_RIG_THEME says otherwise: current
+# first-party shell plugins (image-picker, lock) read it from HOME/.local/state
+# and log QML warnings when it is missing, which would otherwise read here as
+# plugin warnings.
+[ -d "/root/omarchy/themes/\$THEME" ] || { echo "rig-render: no stock theme named \$THEME on the rig" >&2; exit 1; }
 CURRENT="\$RIG_ROOT/.local/state/omarchy/current"
 mkdir -p "\$CURRENT"
-ln -nsf /root/omarchy/themes/tokyo-night "\$CURRENT/theme"
-printf 'tokyo-night\n' > "\$CURRENT/theme.name"
-ln -nsf "\$CURRENT/theme/backgrounds/0-liftoff.webp" "\$CURRENT/background"
+ln -nsf "/root/omarchy/themes/\$THEME" "\$CURRENT/theme"
+printf '%s\n' "\$THEME" > "\$CURRENT/theme.name"
+BACKGROUND=\$(find "/root/omarchy/themes/\$THEME/backgrounds" -maxdepth 1 -type f 2>/dev/null | sort | head -1)
+if [ -n "\$BACKGROUND" ]; then ln -nsf "\$CURRENT/theme/backgrounds/\${BACKGROUND##*/}" "\$CURRENT/background"; fi
 
 cat > "\$SWAY_CONFIG" <<SWAY
 output * resolution \$RES scale \$SCALE
@@ -176,6 +184,9 @@ grep -a -iE "(WARN|ERROR).*(qml|scene)|(qml|scene).*(WARN|ERROR)|cannot assign|i
   | grep -avE "libEGL|MESA|ZINK|failed to get driver|failed to create dri2" | head -20
 grim "\$SHOT" 2>/dev/null
 echo "===RUN=== \$RUN_ID"
+echo "===OMARCHY=== \$(git -c safe.directory=/root/omarchy -C /root/omarchy rev-parse HEAD 2>/dev/null)"
+echo "===QT=== \$(/usr/lib/qt6/bin/qmllint --version 2>/dev/null | head -1)"
+echo "===QUICKSHELL=== \$(qs --version 2>/dev/null | head -1)"
 echo "===LOGSHA=== \$(sha256sum "\$QS_LOG" | awk '{print \$1}')"
 echo "===PACKAGE=== \$(sha256sum /tmp/rigrender-\$RUN_ID.tgz | awk '{print \$1}')"
 echo "===SHOT=== \$(ls -l "\$SHOT" 2>/dev/null | awk '{print \$5}') bytes"
@@ -191,6 +202,9 @@ SIZE="$(printf '%s' "$RESULT" | grep -oE '===SHOT=== [0-9]+' | grep -oE '[0-9]+'
 REMOTE_SHA="$(printf '%s' "$RESULT" | grep -oE '===PACKAGE=== [a-f0-9]{64}' | awk '{print $2}' || true)"
 RAW_LOG_SHA="$(printf '%s' "$RESULT" | grep -oE '===LOGSHA=== [a-f0-9]{64}' | awk '{print $2}' || true)"
 REMOTE_RUN_ID="$(printf '%s' "$RESULT" | grep -oE '===RUN=== [A-Za-z0-9.-]+' | awk '{print $2}' || true)"
+OMARCHY_REV="$(printf '%s' "$RESULT" | grep -oE '^===OMARCHY=== [a-f0-9]{40}$' | awk '{print $2}' || true)"
+QT_VERSION="$(printf '%s' "$RESULT" | sed -n 's/^===QT=== qmllint \([0-9][0-9.]*\)$/\1/p' | head -1 || true)"
+QS_VERSION="$(printf '%s' "$RESULT" | sed -n 's/^===QUICKSHELL=== Quickshell \([0-9][0-9.]*\) .*/\1/p' | head -1 || true)"
 
 if [[ -n "$WARNINGS" ]]; then
   echo "rig-render: shell warnings belong to this plugin run:" >&2
@@ -226,13 +240,17 @@ jq -n --arg fp "$FP" --arg commit "$SOURCE_COMMIT" --argjson dirty "$SOURCE_DIRT
   --arg run "$REMOTE_RUN_ID" --arg logSha "$RAW_LOG_SHA" --arg sha "$PREVIEW_SHA" \
   --arg dimensions "${DIMS/x/ x }" --arg coverage "$COVERAGE" \
   --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --arg theme "$THEME" --arg omarchy "${OMARCHY_REV:-unknown}" --arg qt "${QT_VERSION:-unknown}" \
+  --arg quickshell "${QS_VERSION:-unknown}" \
   '{fingerprint:$fp,sourceCommit:$commit,sourceDirty:$dirty,
     sourcePackageSha256:$archive,remotePackageSha256:$remote,rig:$rig,runId:$run,rawShellLogSha256:$logSha,
     packageBoundary:"runtime tree; generated proof receipts, reports, tests, developer scripts, and marketplace preview excluded",
     evidenceBoundary:"isolated real Omarchy shell and QML under a dedicated headless compositor; plugin-specific fixture hook when present; live plugin IPC toggle; direct full-frame grim capture with no crop or image post-processing",
+    rigVersions:{omarchy:$omarchy,qt:$qt,quickshell:$quickshell},theme:$theme,
     visualInspection:{status:"pending",previewSha256:$sha,checks:[]},
     previewSha256:$sha,dimensions:$dimensions,nonblackCoverage:($coverage|tonumber),capturedAt:$at}' \
   > "$TARGET/.render-proof.json"
 
-echo "rig-render: wrote $OUT (${SIZE} bytes on the rig, ${DIMS}, coverage ${COVERAGE})"
+echo "rig-render: wrote $OUT (${SIZE} bytes on the rig, ${DIMS}, coverage ${COVERAGE}, theme ${THEME})"
+echo "rig-render: omarchy ${OMARCHY_REV:-unknown}, qt ${QT_VERSION:-unknown}, quickshell ${QS_VERSION:-unknown}"
 echo "rig-render: loaded clean, no QML warnings"

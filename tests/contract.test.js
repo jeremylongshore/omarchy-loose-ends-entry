@@ -30,7 +30,10 @@ test("QML launches one bounded scanner command and keeps last known rows on fail
   assert.match(qml, /manageIpc:\s*false/)
   assert.match(qml, /command:\s*\[root\.scannerPath, "--max-depth", "4", root\.scanRoot\]/)
   assert.match(qml, /readonly property int refreshSec:\s*300/)
-  assert.match(qml, /if \(info\.valid\) \{ root\.rows = parsed;/)
+  assert.match(qml, /var scan = Model\.readScan\(text\)/)
+  assert.match(qml, /if \(scan\.valid\) \{ root\.rows = scan\.rows;/)
+  // The scanner output is parsed once per scan, through the bounded reader.
+  assert.doesNotMatch(qml, /Model\.(parseScan|scanInfo|isScanEnvelope)\(/)
   assert.match(qml, /else \{ root\.scanFailed = true; root\.loaded = true \}/)
 })
 
@@ -53,6 +56,11 @@ test("render tooling requires an exact real-shell receipt and human approval", (
   assert.match(render, /rig-before-shell\.sh/)
   assert.match(render, /grim "\\\$SHOT"/)
   assert.doesNotMatch(render, /grim -g|pkill/)
+  // Receipts say which Omarchy and Qt they ran on, and the render can pick a theme.
+  assert.match(render, /OMARCHY_RIG_THEME:-tokyo-night/)
+  assert.match(render, /OMARCHY_RIG_THEME must be a plain theme name/)
+  assert.match(render, /rigVersions:\{omarchy:\$omarchy,qt:\$qt,quickshell:\$quickshell\}/)
+  assert.match(read("scripts/rig-verify.sh"), /rigVersions:\{omarchy:\$omarchy, qt:\$qt\}/)
   const approval = read("scripts/approve-preview.sh")
   assert.match(approval, /product value is visible without reading the README/)
   assert.match(approval, /plugin-specific visual identity/)
@@ -89,4 +97,13 @@ test("QML qualifies Omarchy's palette as Commons.Color, never bare Color", () =>
     assert.doesNotMatch(source, /(^|[^\w.])Color\./m, file + " uses bare Color")
     if (/Commons\.Color\./.test(source)) assert.match(source, /^import qs\.Commons as Commons$/m, file)
   }
+})
+
+test("severity colors adapt to the popup surface instead of a fixed lightness", () => {
+  const qml = read("Panel.qml")
+  assert.match(qml, /readonly property real surfaceLightness: Commons\.Color\.popups\.background\.hslLightness/)
+  assert.match(qml, /severityColor: Qt\.hsla\(severityHue, 0\.56, Model\.toneLightness\(0\.64, 0\.26, root\.surfaceLightness\), 1\)/)
+  assert.match(qml, /stripeColor: Qt\.hsla\(severityHue, 0\.56, Model\.toneLightness\(0\.64, 0\.36, root\.surfaceLightness\), 1\)/)
+  // 0.64 on a light popup was 1.5 to 2.8:1.
+  assert.doesNotMatch(qml, /Qt\.hsla\(severityHue, 0\.56, 0\.64, 1\)/)
 })
